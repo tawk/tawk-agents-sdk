@@ -2,16 +2,6 @@
   "name": "@tawk.to/tawk-agents-sdk",
   "version": "2.0.0",
   "description": "Production-ready AI agent framework with true agentic architecture, multi-agent orchestration, dynamic HITL approvals, native MCP integration, and full observability.",
-  "author": "Tawk.to <support@tawk.to>",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Manoj-tawk/tawk-agents-sdk.git"
-  },
-  "homepage": "https://github.com/Manoj-tawk/tawk-agents-sdk#readme",
-  "bugs": {
-    "url": "https://github.com/Manoj-tawk/tawk-agents-sdk/issues"
-  },
   "publishConfig": {
     "access": "restricted"
   },
@@ -24,38 +14,6 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "keywords": [
-    "ai",
-    "agents",
-    "agentic",
-    "multi-agent",
-    "agent-framework",
-    "openai",
-    "anthropic",
-    "google",
-    "groq",
-    "langfuse",
-    "mcp",
-    "model-context-protocol",
-    "vercel-ai-sdk",
-    "typescript",
-    "production-ready",
-    "tracing",
-    "observability",
-    "guardrails",
-    "human-in-the-loop",
-    "hitl",
-    "approvals",
-    "tool-calling",
-    "parallel-execution",
-    "handoffs",
-    "streaming"
-  ],
   "engines": {
     "node": ">=18.0.0"
   },
@@ -92,39 +50,17 @@
     "prepublish": "npm run build && npm test"
   },
   "dependencies": {
-    "@ai-sdk/groq": "^2.0.29",
     "@toon-format/toon": "^1.0.0",
     "ai": "^5.0.93",
     "langfuse": "^3.30.3",
     "zod": "^3.25.40"
   },
-  "peerDependencies": {
-    "@ai-sdk/anthropic": "^1.0.0",
-    "@ai-sdk/google": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@ai-sdk/openai": {
-      "optional": true
-    },
-    "@ai-sdk/anthropic": {
-      "optional": true
-    },
-    "@ai-sdk/google": {
-      "optional": true
-    }
-  },
-  "optionalDependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.2",
-    "ioredis": "^5.4.2",
-    "mongodb": "^6.12.0"
-  },
   "devDependencies": {
     "@ai-sdk/anthropic": "^2.0.45",
     "@ai-sdk/google": "^2.0.34",
+    "@ai-sdk/groq": "^2.0.29",
     "@ai-sdk/openai": "^2.0.68",
     "@jest/globals": "^30.2.0",
-    "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
@@ -132,10 +68,13 @@
     "dotenv": "^16.4.7",
     "eslint": "^9.17.0",
     "jest": "^30.2.0",
-    "nodemon": "^3.1.9",
     "prettier": "^3.4.2",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.4.2",
+    "mongodb": "^6.12.0"
   }
 }
