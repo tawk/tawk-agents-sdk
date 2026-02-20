@@ -34,7 +34,7 @@ async function test1_Streaming() {
   process.stdout.write('   ');
 
   let fullText = '';
-  for await (const _chunk of stream.textStream) {
+  for await (const chunk of stream.textStream) {
     process.stdout.write(chunk);
     fullText += chunk;
   }

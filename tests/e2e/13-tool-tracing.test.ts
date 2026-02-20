@@ -10,7 +10,7 @@ import {
   Agent,
   run,
   tool,
-  initializeLangfuse,
+  initLangfuse,
   isLangfuseEnabled,
   flushLangfuse,
 } from '../../dist/index';
@@ -24,7 +24,7 @@ console.log('\n🔍 TEST: Tool Call Tracing End-to-End\n');
 // ============================================
 
 // Initialize Langfuse
-const langfuse = initializeLangfuse();
+const langfuse = initLangfuse();
 
 if (!isLangfuseEnabled()) {
   console.log('⚠️  Langfuse not enabled. This test requires:');
@@ -71,7 +71,7 @@ async function test1_SingleToolTrace() {
 
   console.log('✅ Result:', result.finalOutput);
   console.log('📊 Tool calls:', result.metadata.totalToolCalls || 0);
-  console.log('📊 Steps:', result.metadata.agentMetrics?.[0]?.steps || 0);
+  console.log('📊 Steps:', result.metadata.agentMetrics?.[0]?.turns || 0);
 
   if (isLangfuseEnabled()) {
     console.log('🔍 Check Langfuse for:');

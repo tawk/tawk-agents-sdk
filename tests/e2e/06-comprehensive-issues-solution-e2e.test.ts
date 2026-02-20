@@ -346,7 +346,7 @@ GUIDELINES:
               return sources.includes(kb.domain);
             }
             return kb.text.toLowerCase().includes(query.toLowerCase()) || 
-                   query.toLowerCase().split(' ').some(word => kb.text.toLowerCase().includes(word));
+                   query.toLowerCase().split(' ').some((word: string) => kb.text.toLowerCase().includes(word));
           })
           .slice(0, limit);
 

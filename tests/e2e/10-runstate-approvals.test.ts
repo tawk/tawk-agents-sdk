@@ -455,7 +455,7 @@ async function test7_RunStateInterface() {
 
   // Create a mock RunState to verify structure
   const mockRunState: RunStateInterface = {
-    agent: new Agent({
+    currentAgent: new Agent({
       name: 'test-agent',
       instructions: 'Test agent',
     }),
@@ -474,8 +474,8 @@ async function test7_RunStateInterface() {
   };
 
   // Verify structure
-  if (!mockRunState.agent) {
-    throw new Error('RunState should have agent');
+  if (!mockRunState.currentAgent) {
+    throw new Error('RunState should have currentAgent');
   }
 
   if (!Array.isArray(mockRunState.messages)) {

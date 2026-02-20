@@ -10,7 +10,7 @@
  */
 
 import 'dotenv/config';
-import { runResearchSystem } from '../../examples/advanced/multi-agent-research';
+import { runResearchSystem } from '../../examples/03-advanced/14-multi-agent-research';
 
 console.log('\n🧪 E2E TEST 08: Multi-Agent Research Example Test\n');
 console.log('⚠️  This test makes REAL API calls!\n');
@@ -39,8 +39,9 @@ async function testMultiAgentResearchExample() {
     console.log('\n' + '━'.repeat(80));
     console.log('✅ TEST RESULTS:');
     console.log('━'.repeat(80));
-    console.log(`📄 Final Report Length: ${result.finalReport.length} characters`);
-    console.log(`📚 Citations Found: ${result.citations.length}`);
+    const reportStr = JSON.stringify(result.finalReport);
+    console.log(`📄 Final Report Length: ${reportStr.length} characters`);
+    console.log(`📚 Citations Found: ${result.finalReport.references.length}`);
     console.log(`🤖 Subagents Used: ${result.metadata.subagentsUsed}`);
     console.log(`🔧 Total Tool Calls: ${result.metadata.totalToolCalls}`);
     console.log(`📊 Total Tokens: ${result.metadata.totalTokens}`);
@@ -48,7 +49,7 @@ async function testMultiAgentResearchExample() {
 
     // Verify basic requirements
     const checks = {
-      hasReport: result.finalReport.length > 0,
+      hasReport: reportStr.length > 0,
       hasSubagents: result.metadata.subagentsUsed > 0,
       hasToolCalls: result.metadata.totalToolCalls > 0,
       hasTokens: result.metadata.totalTokens > 0,
@@ -69,7 +70,7 @@ async function testMultiAgentResearchExample() {
       
       // Show sample of report
       console.log('📄 Sample Report (first 500 chars):');
-      console.log(result.finalReport.substring(0, 500) + '...\n');
+      console.log(reportStr.substring(0, 500) + '...\n');
       
       return true;
     } else {
