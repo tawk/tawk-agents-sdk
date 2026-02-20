@@ -135,6 +135,8 @@ npm run cli -- --agent coder --verbose               # Coder preset
 
 **[API Reference](./reference/API.md)** - Complete API documentation, type definitions
 
+**[Design Principles](./reference/DESIGN_PRINCIPLES.md)** `20 min` - Industry alignment, architecture decisions
+
 **[Performance Guide](./reference/PERFORMANCE.md)** `30 min` - Optimization strategies, benchmarks
 
 ---
@@ -359,6 +361,7 @@ const result2 = await run(agent, 'What is my name?', { session });
 | **Sessions** | [Flow Diagrams #6](./reference/FLOW_DIAGRAMS.md#6-session-management-flow) |
 | **RAG** | [RAG Guide](./guides/AGENTIC_RAG.md) |
 | **HITL** | [HITL Guide](./guides/HUMAN_IN_THE_LOOP.md) |
+| **Design principles** | [Design Principles](./reference/DESIGN_PRINCIPLES.md) |
 | **Performance** | [Performance Guide](./reference/PERFORMANCE.md) |
 
 ---

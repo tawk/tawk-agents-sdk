@@ -279,6 +279,7 @@ MONGODB_URI=mongodb://localhost:27017/myapp
 | [Error Handling](./docs/guides/ERROR_HANDLING.md) | Error patterns, recovery | 15 min |
 | [TOON Optimization](./docs/guides/TOON_OPTIMIZATION.md) | 18-33% token reduction | 15 min |
 | [API Reference](./docs/reference/API.md) | Complete API documentation | Reference |
+| [Design Principles](./docs/reference/DESIGN_PRINCIPLES.md) | Industry alignment, architecture decisions | 20 min |
 | [Architecture](./docs/reference/COMPLETE_ARCHITECTURE.md) | Full system design | 60 min |
 | [Performance](./docs/reference/PERFORMANCE.md) | Optimization and benchmarks | 30 min |
 
