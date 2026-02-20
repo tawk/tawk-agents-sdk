@@ -49,7 +49,7 @@ sequenceDiagram
 ### Code Example
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -129,7 +129,7 @@ sequenceDiagram
 ### Code Example
 
 ```typescript
-import { Agent, run, tool } from '../../src';
+import { Agent, run, tool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -234,7 +234,7 @@ flowchart TD
 ### Code Example
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 // Specialist agent
@@ -362,7 +362,7 @@ flowchart TD
 ### Code Example
 
 ```typescript
-import { Agent, run, lengthGuardrail, piiDetectionGuardrail, contentSafetyGuardrail } from '../../src';
+import { Agent, run, lengthGuardrail, piiDetectionGuardrail, contentSafetyGuardrail } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -475,7 +475,7 @@ sequenceDiagram
 ### Code Example
 
 ```typescript
-import { initLangfuse, Agent, run } from '../../src';
+import { initLangfuse, Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 // Initialize Langfuse (reads from env vars)
@@ -569,7 +569,7 @@ flowchart LR
 ### Code Example
 
 ```typescript
-import { Agent, run, MemorySession } from '../../src';
+import { Agent, run, MemorySession } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({

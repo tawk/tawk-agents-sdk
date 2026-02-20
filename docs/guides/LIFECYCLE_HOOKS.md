@@ -37,7 +37,7 @@ Complete guide to event-driven workflows using lifecycle hooks.
 ### Basic Usage
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -90,7 +90,7 @@ const result = await run(agent, 'Hello!');
 ### Basic Usage
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -165,7 +165,7 @@ interface RunHookEvents<TContext, TOutput> {
 ### Example 1: Logging Agent Execution
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -198,7 +198,7 @@ await run(agent, 'Hello!');
 ### Example 2: Analytics Tracking
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -236,7 +236,7 @@ await run(agent, 'Hello!');
 ### Example 3: Monitoring Transfers
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const triageAgent = new Agent({
   name: 'triage',
@@ -262,7 +262,7 @@ await run(triageAgent, 'What is the weather?');
 ### Example 4: Custom Event Handling
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -360,7 +360,7 @@ agent.once('agent_start', (context, agent) => {
 ### 5. Combine with Langfuse Tracing
 
 ```typescript
-import { withTrace } from '../../src';
+import { withTrace } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',

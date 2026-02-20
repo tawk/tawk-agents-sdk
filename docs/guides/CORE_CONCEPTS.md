@@ -60,7 +60,7 @@ graph TB
 ### Basic Example
 
 ```typescript
-import { Agent, run, tool } from '../../src';
+import { Agent, run, tool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -521,7 +521,7 @@ sequenceDiagram
 ### Lifecycle Hooks
 
 ```typescript
-import { Agent, AgentHooks } from '../../src';
+import { Agent, AgentHooks } from '@tawk.to/tawk-agents-sdk';
 
 class MonitoredAgent extends AgentHooks {
   onStart(context: any) {
@@ -591,7 +591,7 @@ Now that you understand the core concepts:
 
 1. **Practice**: Try the [Getting Started Guide](../getting-started/GETTING_STARTED.md)
 2. **Explore**: Read the [Features Guide](./FEATURES.md)
-3. **Deep Dive**: Study the [Architecture](../reference/ARCHITECTURE.md)
+3. **Deep Dive**: Study the [Architecture](../reference/COMPLETE_ARCHITECTURE.md)
 4. **Build**: Check out [Examples](../../examples)
 
 ---
@@ -599,7 +599,7 @@ Now that you understand the core concepts:
 ## 🔗 Related Documentation
 
 - [Features Guide](./FEATURES.md) - All features in detail
-- [Architecture](../reference/ARCHITECTURE.md) - Technical deep dive
+- [Architecture](../reference/COMPLETE_ARCHITECTURE.md) - Technical deep dive
 - [API Reference](../reference/API.md) - Complete API docs
 - [Advanced Features](./ADVANCED_FEATURES.md) - Power user features
 

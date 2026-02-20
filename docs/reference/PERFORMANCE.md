@@ -85,7 +85,7 @@ const agent = new Agent({
 **Manual TOON encoding** (for custom use cases):
 
 ```typescript
-import { encodeTOON } from '../../src';
+import { encodeTOON } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   tools: {
@@ -326,7 +326,7 @@ const result = await run(agent, 'Hello', { session });
 For more details, see:
 - [TOON Optimization Guide](../guides/TOON_OPTIMIZATION.md) - Complete TOON guide
 - [API Reference](./API.md)
-- [Architecture](./ARCHITECTURE.md)
+- [Architecture](./COMPLETE_ARCHITECTURE.md)
 - [Getting Started](../getting-started/GETTING_STARTED.md)
 - [Core Concepts](../guides/CORE_CONCEPTS.md)
 

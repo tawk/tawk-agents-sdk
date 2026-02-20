@@ -41,7 +41,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 Create `agent.ts`:
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -69,7 +69,7 @@ npx ts-node agent.ts
 Tools let your agent perform actions:
 
 ```typescript
-import { Agent, run, tool } from '../../src';
+import { Agent, run, tool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -99,7 +99,7 @@ console.log(result.finalOutput); // "The result is 38"
 Sessions maintain conversation history:
 
 ```typescript
-import { Agent, run, MemorySession } from '../../src';
+import { Agent, run, MemorySession } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -123,7 +123,7 @@ console.log(result.finalOutput); // "Your name is Alice"
 Get real-time responses:
 
 ```typescript
-import { Agent, runStream } from '../../src';
+import { Agent, runStream } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({

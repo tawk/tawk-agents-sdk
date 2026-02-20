@@ -33,7 +33,7 @@ Key features and capabilities of Tawk Agents SDK.
 Generate embeddings for semantic search:
 
 ```typescript
-import { generateEmbeddingAI, createEmbeddingTool } from '../../src';
+import { generateEmbeddingAI, createEmbeddingTool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 // Single embedding
@@ -61,7 +61,7 @@ const agent = new Agent({
 Generate images from text:
 
 ```typescript
-import { createImageGenerationTool } from '../../src';
+import { createImageGenerationTool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -79,7 +79,7 @@ Transcription and text-to-speech:
 import { 
   createTranscriptionTool,
   createTextToSpeechTool 
-} from '../../src';
+} from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -95,7 +95,7 @@ const agent = new Agent({
 Improve search relevance:
 
 ```typescript
-import { createRerankTool } from '../../src';
+import { createRerankTool } from '@tawk.to/tawk-agents-sdk';
 import { cohere } from '@ai-sdk/cohere';
 
 const agent = new Agent({
@@ -110,7 +110,7 @@ const agent = new Agent({
 Search Pinecone vector database:
 
 ```typescript
-import { createPineconeSearchTool } from '../../src';
+import { createPineconeSearchTool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -137,7 +137,7 @@ import {
   lengthGuardrail,
   languageGuardrail,
   customGuardrail
-} from '../../src';
+} from '@tawk.to/tawk-agents-sdk';
 
 // Guardrails are configured in AgentConfig
 const agent = new Agent({
@@ -203,7 +203,7 @@ const result = await run(agent, input);
 - **HybridSession** - Redis + MongoDB (production)
 
 ```typescript
-import { RedisSession, DatabaseSession, HybridSession } from '../../src';
+import { RedisSession, DatabaseSession, HybridSession } from '@tawk.to/tawk-agents-sdk';
 
 // Redis
 const redisSession = new RedisSession('user-123', {
@@ -236,7 +236,7 @@ const hybridSession = new HybridSession('user-123', {
 Track all agent interactions:
 
 ```typescript
-import { initializeLangfuse } from '../../src';
+import { initializeLangfuse } from '@tawk.to/tawk-agents-sdk';
 
 // Initialize once at app startup
 initializeLangfuse({
@@ -261,7 +261,7 @@ View in Langfuse dashboard:
 Run multiple agents in parallel, use fastest response:
 
 ```typescript
-import { raceAgents } from '../../src';
+import { raceAgents } from '@tawk.to/tawk-agents-sdk';
 
 const result = await raceAgents(
   [fastAgent, smartAgent, cheapAgent],
@@ -322,7 +322,7 @@ const result = await run(agent, 'Get 100 records');
 **Manual TOON encoding** (for custom use cases):
 
 ```typescript
-import { encodeTOON, decodeTOON } from '../../src';
+import { encodeTOON, decodeTOON } from '@tawk.to/tawk-agents-sdk';
 
 const data = { users: [{ id: 1, name: 'Alice' }] };
 const toon = encodeTOON(data); // 42% smaller than JSON
@@ -346,7 +346,7 @@ const decoded = decodeTOON(toon);
 Use Model Context Protocol tools:
 
 ```typescript
-import { registerMCPServer, getMCPTools, getGlobalMCPManager } from '../../src';
+import { registerMCPServer, getMCPTools, getGlobalMCPManager } from '@tawk.to/tawk-agents-sdk';
 
 await registerMCPServer({
   name: 'filesystem',
@@ -372,7 +372,7 @@ const agent = new Agent({
 Require approval for critical actions:
 
 ```typescript
-import { createCLIApprovalHandler, getGlobalApprovalManager } from '../../src';
+import { createCLIApprovalHandler, getGlobalApprovalManager } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'approval-agent',
@@ -407,5 +407,5 @@ const result = await run(agent, 'Delete important.txt');
 ## Next Steps
 
 - [API Reference](../reference/API.md) - Complete API documentation
-- [Architecture](../reference/ARCHITECTURE.md) - System design details
+- [Architecture](../reference/COMPLETE_ARCHITECTURE.md) - System design details
 - [Performance](../reference/PERFORMANCE.md) - Optimization strategies

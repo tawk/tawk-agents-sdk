@@ -26,7 +26,7 @@ Complete guide to tracing agent execution with Langfuse.
 **For 99% of use cases, tracing just works automatically.**
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -70,7 +70,7 @@ You only need manual tracing utilities (`withTrace`, `createContextualSpan`, etc
 If you want to trace multiple agent calls as part of one workflow:
 
 ```typescript
-import { withTrace, run } from '../../src';
+import { withTrace, run } from '@tawk.to/tawk-agents-sdk';
 
 // Wrap multiple operations in ONE trace
 await withTrace('Customer Support Workflow', async (trace) => {
@@ -93,7 +93,7 @@ await withTrace('Customer Support Workflow', async (trace) => {
 If you want to trace custom code alongside agents:
 
 ```typescript
-import { withTrace, createContextualSpan, run } from '../../src';
+import { withTrace, createContextualSpan, run } from '@tawk.to/tawk-agents-sdk';
 
 await withTrace('Complete Workflow', async (trace) => {
   // Trace custom database query
@@ -116,7 +116,7 @@ await withTrace('Complete Workflow', async (trace) => {
 If you want to add custom metadata to the trace:
 
 ```typescript
-import { withTrace, run } from '../../src';
+import { withTrace, run } from '@tawk.to/tawk-agents-sdk';
 
 await withTrace('User Request', async (trace) => {
   return await run(agent, query);
@@ -150,7 +150,7 @@ LANGFUSE_HOST=https://cloud.langfuse.com  # Optional
 **That's it!** No code needed. Tracing works automatically when you run agents.
 
 ```typescript
-import { Agent, run } from '../../src';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -166,7 +166,7 @@ const result = await run(agent, 'Hello!');
 Only needed if you want custom Langfuse configuration:
 
 ```typescript
-import { initializeLangfuse } from '../../src';
+import { initializeLangfuse } from '@tawk.to/tawk-agents-sdk';
 
 initializeLangfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -186,7 +186,7 @@ initializeLangfuse({
 Wrap multiple operations in one trace:
 
 ```typescript
-import { withTrace } from '../../src';
+import { withTrace } from '@tawk.to/tawk-agents-sdk';
 
 await withTrace('Workflow Name', async (trace) => {
   // Your code here
@@ -203,7 +203,7 @@ await withTrace('Workflow Name', async (trace) => {
 Create custom spans in your code:
 
 ```typescript
-import { createContextualSpan } from '../../src';
+import { createContextualSpan } from '@tawk.to/tawk-agents-sdk';
 
 const span = createContextualSpan({
   name: 'Custom Operation',
@@ -223,7 +223,7 @@ try {
 Get current trace/span from context:
 
 ```typescript
-import { getCurrentTrace, getCurrentSpan } from '../../src';
+import { getCurrentTrace, getCurrentSpan } from '@tawk.to/tawk-agents-sdk';
 
 const trace = getCurrentTrace();
 const span = getCurrentSpan();

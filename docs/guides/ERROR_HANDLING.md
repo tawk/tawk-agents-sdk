@@ -36,7 +36,7 @@ The SDK provides comprehensive error handling with specific error types for diff
 Thrown when an agent exceeds the maximum number of turns.
 
 ```typescript
-import { run, MaxTurnsExceededError } from 'tawk-agents-sdk';
+import { run, MaxTurnsExceededError } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, 'Complex query...', {
@@ -68,7 +68,7 @@ try {
 Thrown when a guardrail blocks input or output.
 
 ```typescript
-import { run, GuardrailTripwireTriggered } from 'tawk-agents-sdk';
+import { run, GuardrailTripwireTriggered } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, 'User input...');
@@ -98,7 +98,7 @@ try {
 Thrown when a tool execution fails.
 
 ```typescript
-import { run, ToolExecutionError } from 'tawk-agents-sdk';
+import { run, ToolExecutionError } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, 'Use tool...');
@@ -128,7 +128,7 @@ try {
 Thrown when an agent handoff fails.
 
 ```typescript
-import { run, HandoffError } from 'tawk-agents-sdk';
+import { run, HandoffError } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(triageAgent, 'Query...');
@@ -155,7 +155,7 @@ try {
 Thrown when an approval is required but not provided.
 
 ```typescript
-import { run, ApprovalRequiredError } from 'tawk-agents-sdk';
+import { run, ApprovalRequiredError } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, 'Delete file...');
@@ -191,7 +191,7 @@ import {
   MaxTurnsExceededError,
   GuardrailTripwireTriggered,
   ToolExecutionError 
-} from 'tawk-agents-sdk';
+} from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, query);
@@ -219,7 +219,7 @@ try {
 ### Pattern 2: Error Handler Function
 
 ```typescript
-import { run } from 'tawk-agents-sdk';
+import { run } from '@tawk.to/tawk-agents-sdk';
 
 async function runWithErrorHandling(agent, query) {
   try {
@@ -251,7 +251,7 @@ function handleAgentError(error, agent, query) {
 ### Pattern 3: Retry with Exponential Backoff
 
 ```typescript
-import { run, ToolExecutionError } from 'tawk-agents-sdk';
+import { run, ToolExecutionError } from '@tawk.to/tawk-agents-sdk';
 
 async function runWithRetry(agent, query, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -277,7 +277,7 @@ async function runWithRetry(agent, query, maxRetries = 3) {
 ### Strategy 1: Fallback Agent
 
 ```typescript
-import { run } from 'tawk-agents-sdk';
+import { run } from '@tawk.to/tawk-agents-sdk';
 
 async function runWithFallback(primaryAgent, fallbackAgent, query) {
   try {
@@ -292,7 +292,7 @@ async function runWithFallback(primaryAgent, fallbackAgent, query) {
 ### Strategy 2: Graceful Degradation
 
 ```typescript
-import { run, ToolExecutionError } from 'tawk-agents-sdk';
+import { run, ToolExecutionError } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, query);
@@ -313,7 +313,7 @@ try {
 ### Strategy 3: User Notification
 
 ```typescript
-import { run, GuardrailTripwireTriggered } from 'tawk-agents-sdk';
+import { run, GuardrailTripwireTriggered } from '@tawk.to/tawk-agents-sdk';
 
 try {
   const result = await run(agent, userInput);
