@@ -142,12 +142,19 @@ export interface ApprovalConfig {
    * Tools that require approval before execution
    */
   requiredForTools?: string[];
-  
+
+  /**
+   * Tools explicitly exempt from default-deny sensitive pattern matching.
+   * Use this to opt out specific tools that match sensitive keywords
+   * (e.g., "execute_query") but are known-safe.
+   */
+  exemptTools?: string[];
+
   /**
    * Function to request approval
    */
   requestApproval: (tool: string, args: any) => Promise<ApprovalResponse>;
-  
+
   /**
    * Timeout for approval (ms)
    */

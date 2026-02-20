@@ -6,6 +6,7 @@
 
 import type { ApprovalConfig, ApprovalResponse, PendingApproval } from '../types/types';
 import { randomBytes } from 'crypto';
+import { safeFetch, validateUrl } from '../helpers/safe-fetch';
 
 // ============================================
 // APPROVAL MANAGER
@@ -41,8 +42,31 @@ export class ApprovalManager {
    * @returns {boolean} True if tool requires approval
    */
   requiresApproval(toolName: string, config?: ApprovalConfig): boolean {
-    if (!config) return false;
-    return config.requiredForTools?.includes(toolName) || false;
+    // Default-deny for known sensitive tool patterns (H-003)
+    const sensitivePatterns = ['delete', 'remove', 'drop', 'exec', 'execute', 'admin', 'destroy'];
+    const matchesSensitivePattern = sensitivePatterns.some(p => toolName.toLowerCase().includes(p));
+
+    if (!config) {
+      if (matchesSensitivePattern) {
+        console.warn(
+          `[ApprovalManager] Tool "${toolName}" matches a sensitive pattern — requiring approval by default.`
+        );
+        return true;
+      }
+      return false;
+    }
+
+    // Explicit config takes priority, but sensitive patterns still require approval
+    // unless the config explicitly exempts them via exemptTools
+    if (config.requiredForTools?.includes(toolName)) {
+      return true;
+    }
+
+    if (matchesSensitivePattern && !config.exemptTools?.includes(toolName)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -234,8 +258,12 @@ export function createWebhookApprovalHandler(
   webhookUrl: string,
   apiKey?: string
 ): ApprovalConfig['requestApproval'] {
+  // Validate webhook URL at creation time
+  validateUrl(webhookUrl);
+
   return async (toolName: string, args: any): Promise<ApprovalResponse> => {
-    const response = await fetch(webhookUrl, {
+    const response = await safeFetch(webhookUrl, {
+      timeoutMs: 10000,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

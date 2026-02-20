@@ -11,6 +11,9 @@
 
 import { z } from 'zod';
 import { spawn, type ChildProcess } from 'child_process';
+import { safeFetch } from '../helpers/safe-fetch';
+
+const MAX_BUFFER_SIZE = 10 * 1024 * 1024; // 10MB max buffer for MCP stdout
 
 // CoreTool type (avoiding circular dependency)
 type CoreTool = {
@@ -326,6 +329,24 @@ export class EnhancedMCPServer {
   }
 
   /**
+   * Validate command for security before spawning
+   */
+  private validateCommand(): void {
+    const command = this.config.command;
+    if (!command) throw new Error('MCP command is required for stdio transport');
+
+    // Allowlist approach: only permit known MCP server commands
+    const allowedCommands = [
+      'node', 'npx', 'python', 'python3', 'uvx', 'deno',
+      'mcp-server', 'mcp-proxy',
+    ];
+    const basename = command.split('/').pop() || command;
+    if (!allowedCommands.some(allowed => basename === allowed || basename.startsWith('mcp-'))) {
+      throw new Error(`MCP command not in allowlist: ${basename}. Allowed: ${allowedCommands.join(', ')}`);
+    }
+  }
+
+  /**
    * Connect via stdio
    */
   private async connectStdio(): Promise<void> {
@@ -333,13 +354,24 @@ export class EnhancedMCPServer {
       throw new Error('command is required for stdio transport');
     }
 
+    this.validateCommand();
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(`Connection timeout (${this.config.connectionTimeout || 10000}ms)`));
       }, this.config.connectionTimeout || 10000);
 
+      // Only pass minimal env vars + explicitly configured ones (ADR-004)
+      // Prevents leaking secrets from process.env into MCP subprocesses
+      const safeEnv: Record<string, string> = {
+        PATH: process.env.PATH || '',
+        HOME: process.env.HOME || '',
+        NODE_ENV: process.env.NODE_ENV || 'production',
+        ...this.config.env,
+      };
+
       this.process = spawn(this.config.command!, this.config.args || [], {
-        env: { ...process.env, ...this.config.env },
+        env: safeEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -353,6 +385,13 @@ export class EnhancedMCPServer {
       let buffer = '';
       this.process.stdout.on('data', (data) => {
         buffer += data.toString();
+        if (buffer.length > MAX_BUFFER_SIZE) {
+          this.process?.kill();
+          // Emit error instead of throwing — throw inside event handler crashes the process (ADR-004)
+          this.process?.emit('error', new Error(`MCP server stdout buffer exceeded ${MAX_BUFFER_SIZE} bytes`));
+          buffer = '';
+          return;
+        }
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
@@ -467,7 +506,8 @@ export class EnhancedMCPServer {
       }
     }
 
-    const response = await fetch(this.config.url!, {
+    const response = await safeFetch(this.config.url!, {
+      timeoutMs: 30000,
       method: 'POST',
       headers,
       body: JSON.stringify({

@@ -1,7 +1,7 @@
 /**
  * Embeddings Generation Feature
  * 
- * Provides text embedding capabilities using AI SDK v5's native `embed` and `embedMany`.
+ * Provides text embedding capabilities using AI SDK v6's `embed` and `embedMany`.
  * Generates vector representations of text for semantic search and RAG.
  * 
  * @module tools/embeddings
@@ -26,7 +26,7 @@ export interface GenerateEmbeddingOptions {
    * The embedding model to use
    * Examples: 'text-embedding-3-small', 'text-embedding-3-large', 'text-embedding-ada-002'
    */
-  model: EmbeddingModel<string>;
+  model: EmbeddingModel;
   
   /**
    * Text to generate embedding for
@@ -46,7 +46,7 @@ export interface GenerateEmbeddingsOptions {
   /**
    * The embedding model to use
    */
-  model: EmbeddingModel<string>;
+  model: EmbeddingModel;
   
   /**
    * Array of texts to generate embeddings for
@@ -227,7 +227,7 @@ export function cosineSimilarity(
  * ```
  */
 export function createEmbeddingTool(
-  model: EmbeddingModel<string>
+  model: EmbeddingModel
 ): CoreTool {
   return {
     description: 'Generate embedding vectors for text. Used for semantic search and similarity comparison.',

@@ -139,18 +139,43 @@ export async function executeToolsInParallel<TContext = unknown>(
     batch.push(executeSingleTool(tools, toolCall, contextWrapper));
 
     if (batch.length === TOOL_EXECUTION_BATCH_SIZE) {
-      const batchResults = await Promise.all(batch);
-      for (const batchResult of batchResults) {
-        results.push(batchResult);
+      // Use allSettled so one tool failure doesn't kill the entire batch
+      const settled = await Promise.allSettled(batch);
+      for (const entry of settled) {
+        if (entry.status === 'fulfilled') {
+          results.push(entry.value);
+        } else {
+          // This shouldn't happen since executeSingleTool already catches,
+          // but handle it defensively
+          results.push({
+            toolName: 'unknown',
+            toolCallId: '',
+            args: {},
+            result: null,
+            error: entry.reason instanceof Error ? entry.reason : new Error(String(entry.reason)),
+            duration: 0,
+          });
+        }
       }
       batch = [];
     }
   }
 
   if (batch.length > 0) {
-    const batchResults = await Promise.all(batch);
-    for (const batchResult of batchResults) {
-      results.push(batchResult);
+    const settled = await Promise.allSettled(batch);
+    for (const entry of settled) {
+      if (entry.status === 'fulfilled') {
+        results.push(entry.value);
+      } else {
+        results.push({
+          toolName: 'unknown',
+          toolCallId: '',
+          args: {},
+          result: null,
+          error: entry.reason instanceof Error ? entry.reason : new Error(String(entry.reason)),
+          duration: 0,
+        });
+      }
     }
   }
 
@@ -255,7 +280,7 @@ async function executeSingleTool<TContext>(
  * @returns Processed response with categorized tool calls, handoffs, and messages
  */
 export function processModelResponse<T extends ToolSet = ToolSet>(
-  response: GenerateTextResult<T, unknown>
+  response: GenerateTextResult<T, any>
 ): ProcessedResponse {
   const toolCalls: ExtractedToolCall[] = [];
   const handoffRequests: HandoffRequest[] = [];
@@ -478,7 +503,7 @@ export async function executeSingleStep<TContext = unknown>(
   agent: Agent<TContext, unknown>,
   state: RunState<TContext, Agent<TContext, unknown>>,
   contextWrapper: RunContextWrapper<TContext>,
-  modelResponse: GenerateTextResult<ToolSet, unknown>
+  modelResponse: GenerateTextResult<ToolSet, any>
 ): Promise<SingleStepResult> {
   const processed = processModelResponse(modelResponse);
 

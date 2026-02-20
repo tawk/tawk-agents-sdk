@@ -7,7 +7,7 @@
  */
 
 import type { Agent } from './agent';
-import type { RunState, RunItem, ModelResponse } from './runstate';
+import type { RunState, RunItem } from './runstate';
 import type { ModelMessage } from 'ai';
 
 /**
@@ -22,13 +22,21 @@ export class RunResult<TContext = any, TAgent extends Agent<TContext, any> = Age
    * Can be used as input for the next agent run.
    */
   get history(): ModelMessage[] {
-    return [
-      ...(typeof this.state.originalInput === 'string' 
-        ? [{ role: 'user' as const, content: this.state.originalInput }]
-        : this.state.originalInput
-      ),
-      ...this.state.messages,
-    ];
+    const inputMessages = typeof this.state.originalInput === 'string'
+      ? [{ role: 'user' as const, content: this.state.originalInput }]
+      : this.state.originalInput;
+
+    // Avoid duplicating input if it's already the prefix of state.messages
+    // (which happens when the runner copies originalInput into messages at start)
+    if (
+      this.state.messages.length > 0 &&
+      inputMessages.length > 0 &&
+      this.state.messages[0] === inputMessages[0]
+    ) {
+      return [...this.state.messages];
+    }
+
+    return [...inputMessages, ...this.state.messages];
   }
 
   /**
@@ -47,27 +55,27 @@ export class RunResult<TContext = any, TAgent extends Agent<TContext, any> = Age
   }
 
   /**
-   * All run items generated during the run
+   * All run items generated during the run (derived from steps)
    */
   get newItems(): RunItem[] {
-    return this.state.items;
-  }
-
-  /**
-   * Raw model responses
-   */
-  get rawResponses(): ModelResponse[] {
-    return this.state.modelResponses;
-  }
-
-  /**
-   * The last response ID (if applicable)
-   */
-  get lastResponseId(): string | undefined {
-    const responses = this.rawResponses;
-    return responses && responses.length > 0
-      ? (responses[responses.length - 1] as any).responseId
-      : undefined;
+    const items: RunItem[] = [];
+    for (const step of this.state.steps) {
+      for (const toolCall of step.toolCalls) {
+        items.push({
+          type: 'tool_call',
+          toolName: toolCall.toolName,
+          args: toolCall.args,
+          result: toolCall.result,
+        } as RunItem);
+      }
+      if (step.text) {
+        items.push({
+          role: 'assistant',
+          content: step.text,
+        } as RunItem);
+      }
+    }
+    return items;
   }
 
   /**
@@ -150,10 +158,10 @@ export class RunResult<TContext = any, TAgent extends Agent<TContext, any> = Age
 /**
  * Streaming run result
  */
-export class StreamedRunResult<TContext = any, TAgent extends Agent<TContext, any> = Agent<any, any>> 
-  extends RunResult<TContext, TAgent> 
+export class StreamedRunResult<TContext = any, TAgent extends Agent<TContext, any> = Agent<any, any>>
+  extends RunResult<TContext, TAgent>
   implements AsyncIterable<any> {
-  
+
   private _currentTurn: number = 0;
   private _maxTurns: number | undefined;
   private _cancelled: boolean = false;
@@ -161,6 +169,11 @@ export class StreamedRunResult<TContext = any, TAgent extends Agent<TContext, an
   private _completed: Promise<void>;
   private _resolveCompleted?: () => void;
   private _rejectCompleted?: (err: unknown) => void;
+
+  /** Internal event buffer filled by the streaming runner */
+  private _events: Array<{ type: string; [key: string]: any }> = [];
+  private _eventsDone: boolean = false;
+  private _eventWaiters: Array<() => void> = [];
 
   constructor(state: RunState<TContext>) {
     super(state);
@@ -222,9 +235,21 @@ export class StreamedRunResult<TContext = any, TAgent extends Agent<TContext, an
   }
 
   /**
+   * Push an event into the buffer (called by the streaming runner)
+   */
+  _pushEvent(event: { type: string; [key: string]: any }): void {
+    this._events.push(event);
+    for (const w of this._eventWaiters) w();
+    this._eventWaiters.length = 0;
+  }
+
+  /**
    * Mark as done
    */
   _done(): void {
+    this._eventsDone = true;
+    for (const w of this._eventWaiters) w();
+    this._eventWaiters.length = 0;
     this._resolveCompleted?.();
   }
 
@@ -233,25 +258,40 @@ export class StreamedRunResult<TContext = any, TAgent extends Agent<TContext, an
    */
   _raiseError(err: unknown): void {
     this._error = err;
+    this._eventsDone = true;
+    for (const w of this._eventWaiters) w();
+    this._eventWaiters.length = 0;
     this._rejectCompleted?.(err);
   }
 
   /**
-   * Async iterator
+   * Async iterator — yields all events (text deltas, tool calls, etc.)
    */
   async *[Symbol.asyncIterator](): AsyncIterator<any> {
-    // Implementation would depend on streaming setup
-    yield* [];
+    let index = 0;
+    while (true) {
+      while (index < this._events.length) {
+        if (this._cancelled) return;
+        yield this._events[index++];
+      }
+      if (this._eventsDone) break;
+      await new Promise<void>((resolve) => { this._eventWaiters.push(resolve); });
+    }
+    if (this._error) throw this._error;
   }
 
   /**
-   * Convert to text stream
+   * Convert to text stream — yields only text delta strings
    */
   toTextStream(): AsyncIterable<string> {
-    // Implementation would filter for text chunks
+    const self = this;
     return {
       async *[Symbol.asyncIterator]() {
-        yield* [];
+        for await (const event of self) {
+          if (event.type === 'text-delta' && event.textDelta) {
+            yield event.textDelta as string;
+          }
+        }
       }
     };
   }

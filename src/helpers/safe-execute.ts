@@ -51,14 +51,21 @@ export async function safeExecuteWithTimeout<T>(
   fn: () => T | Promise<T>,
   timeoutMs: number
 ): Promise<SafeExecuteResult<T>> {
+  let resolved = false;
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      resolve([new Error(`Execution timeout after ${timeoutMs}ms`), null]);
+      if (!resolved) {
+        resolved = true;
+        resolve([new Error(`Execution timeout after ${timeoutMs}ms`), null]);
+      }
     }, timeoutMs);
 
     safeExecute(fn).then((result) => {
-      clearTimeout(timer);
-      resolve(result);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
     });
   });
 }

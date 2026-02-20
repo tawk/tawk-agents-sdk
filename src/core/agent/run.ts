@@ -24,6 +24,7 @@ import type {
   RunOptions,
   RunResult,
   StreamResult,
+  StreamChunk,
   RunState,
 } from './types';
 
@@ -152,15 +153,111 @@ export async function runStream<TContext = any, TOutput = string>(
 ): Promise<StreamResult<TOutput>> {
   // Import runner dynamically to avoid circular dependencies
   const { AgenticRunner } = await import('../runner');
-  
-  // Create runner with streaming enabled
-  const runner = new AgenticRunner<TContext, TOutput>({ ...options, stream: true });
-  
-  // AgenticRunner doesn't have executeStream, it returns StreamResult from execute when stream=true
-  const result = await runner.execute(agent as any, input, options);
-  
-  // The runner should return StreamResult when stream option is true
-  return result as unknown as StreamResult<TOutput>;
+  type StreamEvent = import('../runner').StreamEvent;
+
+  const runner = new AgenticRunner<TContext, TOutput>(options);
+
+  // Create the async generator from the runner
+  const streamGen = runner.executeStream(agent as any, input, options);
+
+  // Buffer for stream events that multiple consumers can read
+  const eventBuffer: Array<StreamEvent | { type: 'done'; result: RunResult<TOutput> }> = [];
+  let streamDone = false;
+  let streamError: any = null;
+  let finalResult: RunResult<TOutput> | null = null;
+  const waiters: Array<() => void> = [];
+
+  // Set up deferred completion
+  let resolveCompleted!: (result: RunResult<TOutput>) => void;
+  let rejectCompleted!: (error: any) => void;
+  const completed = new Promise<RunResult<TOutput>>((resolve, reject) => {
+    resolveCompleted = resolve;
+    rejectCompleted = reject;
+  });
+
+  // Consume the generator in the background, buffering events
+  (async () => {
+    try {
+      let iterResult = await streamGen.next();
+      while (!iterResult.done) {
+        eventBuffer.push(iterResult.value);
+        // Notify waiting consumers
+        for (const w of waiters) w();
+        waiters.length = 0;
+        iterResult = await streamGen.next();
+      }
+      // Generator returned the final RunResult
+      finalResult = iterResult.value;
+      streamDone = true;
+      for (const w of waiters) w();
+      waiters.length = 0;
+      resolveCompleted(finalResult!);
+    } catch (error) {
+      streamError = error;
+      streamDone = true;
+      for (const w of waiters) w();
+      waiters.length = 0;
+      rejectCompleted(error);
+    }
+  })();
+
+  // Helper to wait for new events
+  function waitForEvent(): Promise<void> {
+    return new Promise<void>((resolve) => { waiters.push(resolve); });
+  }
+
+  // Async generator for text stream (yields only text deltas)
+  async function* createTextStream(): AsyncGenerator<string> {
+    let index = 0;
+    while (true) {
+      while (index < eventBuffer.length) {
+        const event = eventBuffer[index++];
+        if ('type' in event && event.type === 'text-delta') {
+          yield (event as any).textDelta;
+        }
+      }
+      if (streamDone) break;
+      await waitForEvent();
+    }
+    if (streamError) throw streamError;
+  }
+
+  // Async generator for full stream (yields all StreamChunk events)
+  async function* createFullStream(): AsyncGenerator<StreamChunk> {
+    let index = 0;
+    while (true) {
+      while (index < eventBuffer.length) {
+        const event = eventBuffer[index++] as StreamEvent;
+        // Map StreamEvent to StreamChunk
+        if (event.type === 'text-delta') {
+          yield { type: 'text-delta', textDelta: (event as any).textDelta };
+        } else if (event.type === 'tool-call') {
+          yield {
+            type: 'tool-call',
+            toolCall: { toolName: (event as any).toolName, args: (event as any).args },
+          };
+        } else if (event.type === 'tool-result') {
+          yield {
+            type: 'tool-result',
+            toolResult: { toolName: (event as any).toolName, result: (event as any).result },
+          };
+        } else if (event.type === 'step-complete') {
+          yield { type: 'step-finish' };
+        } else if (event.type === 'finish') {
+          yield { type: 'finish' };
+        }
+      }
+      if (streamDone) break;
+      await waitForEvent();
+    }
+    if (streamError) throw streamError;
+  }
+
+  return {
+    textStream: createTextStream(),
+    fullStream: createFullStream(),
+    completed,
+  };
 }
 
 /**
@@ -185,7 +282,7 @@ async function resumeRun<TContext = any, TOutput = string>(
     context: state.context
   });
   
-  return await runner.execute(state.agent as any, state.messages, {
+  return await runner.execute(state.currentAgent as any, state.messages, {
     ...options,
     context: state.context
   });

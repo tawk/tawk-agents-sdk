@@ -49,13 +49,20 @@ export function getCurrentSpan(): any | null {
 }
 
 /**
- * Set the current span in context
+ * Set the current span in context.
+ * Uses enterWith() to create a new immutable store instead of mutating the
+ * shared reference, preventing cross-request span leakage under concurrency.
+ *
+ * @returns true if the span was set, false if no trace context exists
  */
-export function setCurrentSpan(span: any): void {
+export function setCurrentSpan(span: any): boolean {
   const context = traceStorage.getStore();
   if (context) {
-    context.span = span;
+    // Create a new context object instead of mutating the existing one (ADR-002)
+    traceStorage.enterWith({ ...context, span });
+    return true;
   }
+  return false;
 }
 
 /**

@@ -28,10 +28,14 @@
  */
 
 import type { Guardrail, GuardrailResult, RunContextWrapper } from '../core/agent';
-import { generateText } from 'ai';
+import { generateObject as _generateObject } from 'ai';
+
+// Wrap generateObject to bypass TS2589 deep type instantiation with Zod schemas
+const generateObject = _generateObject as (opts: any) => Promise<any>;
 import { z } from 'zod';
 import { getCurrentSpan } from '../tracing/context';
 import { extractModelName } from '../lifecycle/langfuse';
+import { PII_PATTERNS, testPIIPattern } from './utils';
 
 // ============================================
 // CONTENT SAFETY GUARDRAILS
@@ -79,15 +83,17 @@ export function contentSafetyGuardrail<TContext = any>(config: {
         'self-harm'
       ];
 
+      const sanitizedCategories = categories.map(c => c.replace(/[^a-zA-Z0-9\s\-_]/g, '').trim()).filter(Boolean);
+
       // Get parent span for nesting (from guardrails span)
       const parentSpan = getCurrentSpan();
-      
+
       // Create GENERATION trace for this LLM-based guardrail
       const generation = parentSpan?.generation({
         name: `Guardrail: ${config.name || 'content_safety'}`,
         model: extractModelName(config.model),
         input: {
-          system: `You are a content moderation system. Analyze the following text and determine if it contains any of these categories: ${categories.join(', ')}. Respond with a JSON object.`,
+          system: `You are a content moderation system. Analyze the following text and determine if it contains any of these categories: ${sanitizedCategories.join(', ')}. Respond with a JSON object.`,
           prompt: content
         },
         metadata: {
@@ -97,31 +103,28 @@ export function contentSafetyGuardrail<TContext = any>(config: {
         }
       });
 
-      const result = await generateText({
-        model: config.model,
-        system: `You are a content moderation system. Analyze the following text and determine if it contains any of these categories: ${categories.join(', ')}. Respond with a JSON object.`,
-        prompt: content,
-        tools: {
-          classify: {
-            description: 'Classify content safety',
-            inputSchema: z.object({
-              isSafe: z.boolean(),
-              detectedCategories: z.array(z.string()),
-              confidence: z.number()
-            }),
-            execute: async (args: any) => args
-          }
-        } as any
+      const classificationSchema = z.object({
+        isSafe: z.boolean().describe('Whether the content is safe'),
+        detectedCategories: z.array(z.string()).describe('List of detected unsafe categories'),
+        confidence: z.number().describe('Confidence score from 0 to 1')
       });
 
-      const classification = result.toolCalls?.[0]?.input as any;
+      const result = await generateObject({
+        model: config.model,
+        schema: classificationSchema,
+        schemaName: 'ContentSafetyClassification',
+        system: `You are a content moderation system. Analyze the following text and determine if it contains any of these categories: ${sanitizedCategories.join(', ')}.`,
+        prompt: content,
+      });
+
+      const classification = result.object;
 
       // End generation with usage tracking
       if (generation) {
         generation.end({
           output: {
             classification,
-            passed: !classification || classification.isSafe
+            passed: classification.isSafe
           },
           usage: {
             input: result.usage?.inputTokens || 0,
@@ -131,7 +134,7 @@ export function contentSafetyGuardrail<TContext = any>(config: {
         });
       }
 
-      if (!classification || classification.isSafe) {
+      if (classification.isSafe) {
         return { passed: true };
       }
 
@@ -175,25 +178,16 @@ export function piiDetectionGuardrail<TContext = any>(config: {
   block?: boolean; // If true, block content with PII. If false, just warn
   categories?: string[];
 }): Guardrail<TContext> {
-  const piiPatterns = {
-    email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-    phone: /\b(\+\d{1,3}[-.]?)?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}\b/g,
-    ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
-    creditCard: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-    ipAddress: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g
-  };
-
   return {
     name: config.name || 'pii_detection',
     type: config.type,
     validate: async (content: string) => {
       const detectedPII: string[] = [];
 
-      // Check each PII category
-      for (const [category, pattern] of Object.entries(piiPatterns)) {
+      // Check each PII category (with Luhn validation for credit cards)
+      for (const [category, pattern] of Object.entries(PII_PATTERNS)) {
         if (!config.categories || config.categories.includes(category)) {
-          const matches = content.match(pattern);
-          if (matches) {
+          if (testPIIPattern(category, pattern, content)) {
             detectedPII.push(category);
           }
         }
@@ -338,15 +332,17 @@ export function topicRelevanceGuardrail<TContext = any>(config: {
     name: config.name || 'topic_relevance',
     type: config.type,
     validate: async (content: string) => {
+      const sanitizedTopics = config.allowedTopics.map(t => t.replace(/[^a-zA-Z0-9\s\-_]/g, '').trim()).filter(Boolean);
+
       // Get parent span for nesting
       const parentSpan = getCurrentSpan();
-      
+
       // Create GENERATION trace for this LLM-based guardrail
       const generation = parentSpan?.generation({
         name: `Guardrail: ${config.name || 'topic_relevance'}`,
         model: extractModelName(config.model),
         input: {
-          system: `Analyze if the following text is relevant to these topics: ${config.allowedTopics.join(', ')}. Rate relevance from 0-10.`,
+          system: `Analyze if the following text is relevant to these topics: ${sanitizedTopics.join(', ')}. Rate relevance from 0-10.`,
           prompt: content
         },
         metadata: {
@@ -356,25 +352,22 @@ export function topicRelevanceGuardrail<TContext = any>(config: {
         }
       });
 
-      const result = await generateText({
-        model: config.model,
-        system: `Analyze if the following text is relevant to these topics: ${config.allowedTopics.join(', ')}. Rate relevance from 0-10.`,
-        prompt: content,
-        tools: {
-          rate_relevance: {
-            description: 'Rate topic relevance',
-            inputSchema: z.object({
-              isRelevant: z.boolean(),
-              relevanceScore: z.number(),
-              matchedTopics: z.array(z.string()),
-              reasoning: z.string()
-            }),
-            execute: async (args: any) => args
-          }
-        } as any
+      const relevanceSchema = z.object({
+        isRelevant: z.boolean().describe('Whether the content is relevant to the allowed topics'),
+        relevanceScore: z.number().describe('Relevance score from 0 to 10'),
+        matchedTopics: z.array(z.string()).describe('Topics that matched'),
+        reasoning: z.string().describe('Brief explanation of the relevance assessment')
       });
 
-      const rating = result.toolCalls?.[0]?.input as any;
+      const result = await generateObject({
+        model: config.model,
+        schema: relevanceSchema,
+        schemaName: 'TopicRelevance',
+        system: `Analyze if the following text is relevant to these topics: ${sanitizedTopics.join(', ')}. Rate relevance from 0-10.`,
+        prompt: content,
+      });
+
+      const rating = result.object;
       const threshold = config.threshold || 5;
 
       // End generation with usage tracking
@@ -382,7 +375,7 @@ export function topicRelevanceGuardrail<TContext = any>(config: {
         generation.end({
           output: {
             rating,
-            passed: rating && rating.isRelevant && rating.relevanceScore >= threshold
+            passed: rating.isRelevant && rating.relevanceScore >= threshold
           },
           usage: {
             input: result.usage?.inputTokens || 0,
@@ -392,10 +385,10 @@ export function topicRelevanceGuardrail<TContext = any>(config: {
         });
       }
 
-      if (!rating || !rating.isRelevant || rating.relevanceScore < threshold) {
+      if (!rating.isRelevant || rating.relevanceScore < threshold) {
         return {
           passed: false,
-          message: `Content not relevant to allowed topics. Score: ${rating?.relevanceScore || 0}`,
+          message: `Content not relevant to allowed topics. Score: ${rating.relevanceScore}`,
           metadata: rating
         };
       }
@@ -462,9 +455,22 @@ export function formatValidationGuardrail<TContext = any>(config: {
             throw new Error('YAML validation not implemented');
 
           case 'markdown':
-            // Basic markdown check
-            if (!content.includes('#') && !content.includes('*') && !content.includes('[')) {
-              throw new Error('Content does not appear to be markdown');
+            // Check for common markdown syntax elements
+            const mdPatterns = [
+              /^#{1,6}\s/m,           // Headers
+              /\*\*.+?\*\*/,           // Bold
+              /\*.+?\*/,               // Italic
+              /\[.+?\]\(.+?\)/,        // Links
+              /^\s*[-*+]\s/m,          // Unordered lists
+              /^\s*\d+\.\s/m,          // Ordered lists
+              /^>\s/m,                 // Blockquotes
+              /```[\s\S]*?```/,        // Code blocks
+              /`[^`]+`/,              // Inline code
+              /^\s*---\s*$/m,          // Horizontal rules
+              /!\[.*?\]\(.*?\)/,       // Images
+            ];
+            if (!mdPatterns.some(p => p.test(content))) {
+              throw new Error('Content does not contain recognizable markdown formatting');
             }
             break;
         }
@@ -583,6 +589,17 @@ export function rateLimitGuardrail<TContext = any>(config: {
       entry.count++;
       config.storage.set(key, entry);
 
+      // Probabilistic cleanup of expired entries to prevent memory leak.
+      // Only run ~5% of the time when storage exceeds 100 entries to avoid O(n) cost on every call.
+      if (config.storage.size > 100 && Math.random() < 0.05) {
+        const cleanupNow = Date.now();
+        for (const [k, v] of config.storage) {
+          if (cleanupNow > v.resetAt) {
+            config.storage.delete(k);
+          }
+        }
+      }
+
       if (entry.count > config.maxRequests) {
         const resetIn = Math.ceil((entry.resetAt - now) / 1000);
         return {
@@ -655,30 +672,27 @@ export function languageGuardrail<TContext = any>(config: {
         }
       });
 
-      const result = await generateText({
-        model: config.model,
-        system: 'Detect the language of the text. Respond with the ISO 639-1 language code.',
-        prompt: content,
-        tools: {
-          detect_language: {
-            description: 'Detect language',
-            inputSchema: z.object({
-              language: z.string(),
-              confidence: z.number()
-            }),
-            execute: async (args: any) => args
-          }
-        } as any
+      const languageSchema = z.object({
+        language: z.string().describe('ISO 639-1 language code (e.g., en, es, fr)'),
+        confidence: z.number().describe('Confidence score from 0 to 1')
       });
 
-      const detection = result.toolCalls?.[0]?.input as any;
+      const result = await generateObject({
+        model: config.model,
+        schema: languageSchema,
+        schemaName: 'LanguageDetection',
+        system: 'Detect the language of the text. Respond with the ISO 639-1 language code.',
+        prompt: content,
+      });
+
+      const detection = result.object;
 
       // End generation with usage tracking
       if (generation) {
         generation.end({
           output: {
             detection,
-            passed: detection && config.allowedLanguages.includes(detection.language)
+            passed: config.allowedLanguages.includes(detection.language)
           },
           usage: {
             input: result.usage?.inputTokens || 0,
@@ -688,10 +702,10 @@ export function languageGuardrail<TContext = any>(config: {
         });
       }
 
-      if (!detection || !config.allowedLanguages.includes(detection.language)) {
+      if (!config.allowedLanguages.includes(detection.language)) {
         return {
           passed: false,
-          message: `Language not allowed: ${detection?.language || 'unknown'}. Allowed: ${config.allowedLanguages.join(', ')}`,
+          message: `Language not allowed: ${detection.language}. Allowed: ${config.allowedLanguages.join(', ')}`,
           metadata: detection
         };
       }
@@ -756,30 +770,27 @@ export function sentimentGuardrail<TContext = any>(config: {
         }
       });
 
-      const result = await generateText({
-        model: config.model,
-        system: 'Analyze the sentiment of the text as positive, negative, or neutral.',
-        prompt: content,
-        tools: {
-          analyze_sentiment: {
-            description: 'Analyze sentiment',
-            inputSchema: z.object({
-              sentiment: z.enum(['positive', 'negative', 'neutral']),
-              confidence: z.number(),
-              reasoning: z.string()
-            }),
-            execute: async (args: any) => args
-          }
-        } as any
+      const sentimentSchema = z.object({
+        sentiment: z.enum(['positive', 'negative', 'neutral']).describe('The detected sentiment'),
+        confidence: z.number().describe('Confidence score from 0 to 1'),
+        reasoning: z.string().describe('Brief explanation of the sentiment assessment')
       });
 
-      const sentiment = result.toolCalls?.[0]?.input as any;
+      const result = await generateObject({
+        model: config.model,
+        schema: sentimentSchema,
+        schemaName: 'SentimentAnalysis',
+        system: 'Analyze the sentiment of the text as positive, negative, or neutral.',
+        prompt: content,
+      });
+
+      const sentiment = result.object;
 
       // End generation with usage tracking
       if (generation) {
-        const passed = !(config.blockedSentiments?.includes(sentiment?.sentiment) || 
-          (config.allowedSentiments && !config.allowedSentiments.includes(sentiment?.sentiment)));
-        
+        const passed = !(config.blockedSentiments?.includes(sentiment.sentiment) ||
+          (config.allowedSentiments && !config.allowedSentiments.includes(sentiment.sentiment)));
+
         generation.end({
           output: {
             sentiment,
@@ -793,18 +804,18 @@ export function sentimentGuardrail<TContext = any>(config: {
         });
       }
 
-      if (config.blockedSentiments?.includes(sentiment?.sentiment)) {
+      if (config.blockedSentiments?.includes(sentiment.sentiment)) {
         return {
           passed: false,
-          message: `Sentiment not allowed: ${sentiment?.sentiment || 'unknown'}`,
+          message: `Sentiment not allowed: ${sentiment.sentiment}`,
           metadata: sentiment
         };
       }
 
-      if (config.allowedSentiments && !config.allowedSentiments.includes(sentiment?.sentiment)) {
+      if (config.allowedSentiments && !config.allowedSentiments.includes(sentiment.sentiment)) {
         return {
           passed: false,
-          message: `Sentiment not in allowed list: ${sentiment?.sentiment || 'unknown'}`,
+          message: `Sentiment not in allowed list: ${sentiment.sentiment}`,
           metadata: sentiment
         };
       }
@@ -868,24 +879,21 @@ export function toxicityGuardrail<TContext = any>(config: {
         }
       });
 
-      const result = await generateText({
-        model: config.model,
-        system: 'Rate the toxicity of the text on a scale from 0 (not toxic) to 10 (extremely toxic).',
-        prompt: content,
-        tools: {
-          rate_toxicity: {
-            description: 'Rate toxicity',
-            inputSchema: z.object({
-              toxicityScore: z.number(),
-              categories: z.array(z.string()),
-              explanation: z.string()
-            }),
-            execute: async (args: any) => args
-          }
-        } as any
+      const toxicitySchema = z.object({
+        toxicityScore: z.number().describe('Toxicity score from 0 (not toxic) to 10 (extremely toxic)'),
+        categories: z.array(z.string()).describe('Categories of toxicity detected'),
+        explanation: z.string().describe('Brief explanation of the toxicity assessment')
       });
 
-      const rating = result.toolCalls?.[0]?.input as any;
+      const result = await generateObject({
+        model: config.model,
+        schema: toxicitySchema,
+        schemaName: 'ToxicityRating',
+        system: 'Rate the toxicity of the text on a scale from 0 (not toxic) to 10 (extremely toxic).',
+        prompt: content,
+      });
+
+      const rating = result.object;
       const threshold = config.threshold || 5;
 
       // End generation with usage tracking
@@ -893,7 +901,7 @@ export function toxicityGuardrail<TContext = any>(config: {
         generation.end({
           output: {
             rating,
-            passed: !rating || rating.toxicityScore <= threshold
+            passed: rating.toxicityScore <= threshold
           },
           usage: {
             input: result.usage?.inputTokens || 0,
@@ -903,10 +911,10 @@ export function toxicityGuardrail<TContext = any>(config: {
         });
       }
 
-      if (rating && rating.toxicityScore > threshold) {
+      if (rating.toxicityScore > threshold) {
         return {
           passed: false,
-          message: `Content toxicity too high: ${rating.toxicityScore || 0} (threshold: ${threshold})`,
+          message: `Content toxicity too high: ${rating.toxicityScore} (threshold: ${threshold})`,
           metadata: rating
         };
       }

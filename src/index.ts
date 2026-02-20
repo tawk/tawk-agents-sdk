@@ -84,6 +84,18 @@ export {
 } from './core/transfers';
 export type { TransferResult } from './core/transfers';
 
+// Race agents (parallel execution pattern)
+export { raceAgents } from './core/race-agents';
+export type { RaceAgentsOptions } from './core/race-agents';
+
+// Coordination (parallel, judge, hierarchical patterns)
+export { runParallel, runWithJudge, runHierarchical } from './core/coordination';
+export type {
+  RaceResult,
+  ParallelAgentsOptions,
+  ParallelResult,
+} from './core/coordination';
+
 // Run state management
 export { RunState } from './core/runstate';
 export type {
@@ -111,10 +123,12 @@ export {
 } from './tracing/context';
 
 // Langfuse initialization
-export { 
-  initializeLangfuse as initLangfuse, 
-  getLangfuse, 
-  isLangfuseEnabled 
+export {
+  initializeLangfuse as initLangfuse,
+  getLangfuse,
+  isLangfuseEnabled,
+  flushLangfuse,
+  shutdownLangfuse,
 } from './lifecycle/langfuse';
 
 // ============================================
@@ -170,13 +184,20 @@ export {
 } from './helpers/message';
 
 // Safe execution
-export { 
-  safeExecute 
+export {
+  safeExecute
 } from './helpers/safe-execute';
 
-export type { 
-  SafeExecuteResult 
+export type {
+  SafeExecuteResult
 } from './helpers/safe-execute';
+
+// Error sanitization
+export { sanitizeError, redactSecrets } from './helpers/sanitize';
+
+// SSRF-safe fetch
+export { safeFetch, safeFetchText, validateUrl } from './helpers/safe-fetch';
+export type { SafeFetchOptions } from './helpers/safe-fetch';
 
 // ============================================
 // LIFECYCLE HOOKS
@@ -202,3 +223,102 @@ export type {
   Prettify,
   UnwrapPromise,
 } from './types/helpers';
+
+// ============================================
+// TOOLS & AI UTILITIES
+// ============================================
+
+// Embeddings
+export {
+  generateEmbeddingAI,
+  generateEmbeddingsAI,
+  cosineSimilarity,
+  createEmbeddingTool,
+} from './tools/embeddings';
+
+export type {
+  GenerateEmbeddingOptions,
+  GenerateEmbeddingsOptions,
+  EmbeddingResult,
+  EmbeddingsResult,
+} from './tools/embeddings';
+
+// Image generation
+export {
+  generateImageAI,
+  createImageGenerationTool,
+} from './tools/image';
+
+export type {
+  GenerateImageOptions,
+  GenerateImageResult,
+} from './tools/image';
+
+// Audio (speech + transcription)
+export {
+  transcribeAudioAI,
+  createTranscriptionTool,
+  generateSpeechAI,
+  createTextToSpeechTool,
+} from './tools/audio';
+
+export type {
+  TranscribeAudioOptions,
+  TranscribeAudioResult,
+  GenerateSpeechOptions,
+  GenerateSpeechResult,
+} from './tools/audio';
+
+// Reranking
+export {
+  rerankDocuments,
+  createRerankTool,
+} from './tools/rerank';
+
+export type {
+  RerankOptions,
+  RerankResult,
+} from './tools/rerank';
+
+// Video generation
+export {
+  generateVideoAI,
+  createVideoGenerationTool,
+} from './tools/video';
+
+export type {
+  GenerateVideoOptions,
+  GenerateVideoResult,
+} from './tools/video';
+
+// Default tools convenience function
+export { createDefaultTools } from './tools/defaults';
+
+// ============================================
+// AI SDK v6 MIDDLEWARE & UTILITIES (Re-exports)
+// ============================================
+
+export {
+  wrapLanguageModel,
+  extractReasoningMiddleware,
+  defaultSettingsMiddleware,
+  simulateStreamingMiddleware,
+  createProviderRegistry,
+  customProvider,
+  smoothStream,
+  pruneMessages,
+  Output,
+  stepCountIs,
+} from 'ai';
+
+// ============================================
+// AI SDK v6 ERROR CLASSES (Re-exports)
+// ============================================
+
+export {
+  APICallError,
+  RetryError,
+  NoSuchToolError,
+  InvalidToolInputError,
+  ToolCallRepairError,
+} from 'ai';

@@ -104,7 +104,11 @@ export function detectTransfer(
       const targetAgent = subagentMap.get(agentName);
       
       if (!targetAgent) {
-        // Agent not found
+        // Transfer target not found — log warning so this isn't silently swallowed
+        console.warn(
+          `[tawk-agents-sdk] Transfer target "${agentName}" not found in subagents of "${currentAgent.name}". ` +
+          `Available: [${Array.from(subagentMap.keys()).join(', ')}]`
+        );
         return null;
       }
       

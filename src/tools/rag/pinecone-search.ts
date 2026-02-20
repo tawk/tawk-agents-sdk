@@ -60,7 +60,7 @@ class QueryEmbeddingCache {
     this.cacheKeyGenerator = cacheKeyGenerator;
   }
 
-  async getEmbedding(query: string, embeddingModel: EmbeddingModel<string>, providerOptions?: Record<string, any>): Promise<number[]> {
+  async getEmbedding(query: string, embeddingModel: EmbeddingModel, providerOptions?: Record<string, any>): Promise<number[]> {
     if (!this.enabled) {
       // Cache disabled, generate embedding directly
       const result = await generateEmbeddingAI({
@@ -167,7 +167,7 @@ export interface PineconeSearchConfig {
   /** API version (default: '2025-10') */
   apiVersion?: string;
   /** Embedding model for query encoding (supports OpenAI, Anthropic, Google, Mistral, etc.) */
-  embeddingModel: EmbeddingModel<string>;
+  embeddingModel: EmbeddingModel;
   /** Provider-specific options for embedding generation (e.g., { openai: { dimensions: 1024 } }) */
   embeddingProviderOptions?: Record<string, any>;
   /** Optional default metadata filter for Pinecone queries (e.g., { category: { $eq: 'technical' } }) */

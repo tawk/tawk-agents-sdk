@@ -19,7 +19,7 @@
  * @version 1.0.0
  */
 
-import type { LanguageModel } from 'ai';
+import type { LanguageModel, ToolCallRepairFunction, StopCondition, PrepareStepFunction, ToolSet } from 'ai';
 import { z } from 'zod';
 import { AgentHooks } from '../../lifecycle';
 import { createTransferTools } from '../transfers';
@@ -164,10 +164,22 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
   
   /** Enable TOON encoding for token reduction */
   private useTOON?: boolean;
-  
+
   /** Tokenizer function for calculating token counts */
   private tokenizerFn: TokenizerFn;
-  
+
+  /** Auto-repair malformed tool call arguments */
+  private toolCallRepair?: ToolCallRepairFunction<ToolSet>;
+
+  /** Stop condition for multi-step execution */
+  private stopWhen?: StopCondition<ToolSet> | StopCondition<ToolSet>[];
+
+  /** Active tools subset per step */
+  private activeTools?: string[];
+
+  /** Prepare step function for dynamic settings */
+  private prepareStep?: PrepareStepFunction<ToolSet>;
+
   /** Cached static instructions for performance */
   private cachedInstructions?: string;
 
@@ -202,6 +214,10 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
     this.shouldFinish = config.shouldFinish;
     this.useTOON = config.useTOON || false;
     this.tokenizerFn = config.tokenizerFn || defaultTokenizerFn;
+    this.toolCallRepair = config.toolCallRepair;
+    this.stopWhen = config.stopWhen;
+    this.activeTools = config.activeTools;
+    this.prepareStep = config.prepareStep;
 
     // Setup transfer tools for subagents
     this._setupTransferTools();
@@ -361,7 +377,11 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
       tokenizerFn: overrides.tokenizerFn ?? this.tokenizerFn,
       onStepFinish: overrides.onStepFinish ?? this.onStepFinish,
       shouldFinish: overrides.shouldFinish ?? this.shouldFinish,
-      useTOON: overrides.useTOON ?? this.useTOON
+      useTOON: overrides.useTOON ?? this.useTOON,
+      toolCallRepair: overrides.toolCallRepair ?? this.toolCallRepair,
+      stopWhen: overrides.stopWhen ?? this.stopWhen,
+      activeTools: overrides.activeTools ?? this.activeTools,
+      prepareStep: overrides.prepareStep ?? this.prepareStep,
     });
   }
 
@@ -431,5 +451,9 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
   get _onStepFinish() { return this.onStepFinish; }
   get _shouldFinish() { return this.shouldFinish; }
   get _useTOON() { return this.useTOON; }
+  get _toolCallRepair() { return this.toolCallRepair; }
+  get _stopWhen() { return this.stopWhen; }
+  get _activeTools() { return this.activeTools; }
+  get _prepareStep() { return this.prepareStep; }
 }
 

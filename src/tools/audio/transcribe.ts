@@ -1,7 +1,7 @@
 /**
  * Audio Transcription Feature
  * 
- * Provides audio transcription capabilities using AI SDK v5's native `experimental_transcribe`.
+ * Provides audio transcription capabilities using AI SDK v6's `experimental_transcribe`.
  * Converts speech to text using models like Whisper.
  * 
  * @module tools/audio
@@ -10,6 +10,7 @@
 import { experimental_transcribe as transcribe } from 'ai';
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
+import { safeFetch } from '../../helpers/safe-fetch';
 
 // Tool definition type (AI SDK v5 compatible)
 type CoreTool = {
@@ -141,8 +142,8 @@ export function createTranscriptionTool(
       language: z.string().optional().describe('Language code (e.g., "en", "es") to improve accuracy'),
     }),
     execute: async ({ audioUrl, language }: { audioUrl: string; language?: string }) => {
-      // Fetch audio from URL
-      const response = await fetch(audioUrl);
+      // Fetch audio from URL (SSRF-safe)
+      const response = await safeFetch(audioUrl, { timeoutMs: 60000 });
       const audioBuffer = await response.arrayBuffer();
       const audioData = new Uint8Array(audioBuffer);
       

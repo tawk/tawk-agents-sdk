@@ -25,7 +25,18 @@
  * @version 1.0.0
  */
 
-import { generateText, type LanguageModel, type ModelMessage } from 'ai';
+import {
+  generateText,
+  streamText,
+  Output,
+  pruneMessages,
+  type LanguageModel,
+  type ModelMessage,
+  type ToolCallRepairFunction,
+  type StopCondition,
+  type PrepareStepFunction,
+  type ToolSet,
+} from 'ai';
 import type { Agent, RunContextWrapper } from './agent';
 import { RunState, NextStepType } from './runstate';
 import { executeSingleStep } from './execution';
@@ -42,6 +53,7 @@ import {
   runWithTraceContext,
 } from '../tracing/context';
 import { RunHooks } from '../lifecycle';
+import { sanitizeError } from '../helpers/sanitize';
 
 /** Error thrown when agent run exceeds token budget */
 export class TokenLimitExceededError extends Error {
@@ -167,6 +179,8 @@ export interface RunResult<TOutput = string> {
     handoffChain?: string[];
     agentMetrics: any[];
     duration: number;
+    /** True when output guardrails were skipped (e.g. token limit exceeded) */
+    guardrailBypassed?: boolean;
   };
 }
 
@@ -232,8 +246,8 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
     const context = mergedOptions.context || ({} as TContext);
     const maxTurns = mergedOptions.maxTurns || 50;
 
-    // Initialize run state
-    const state = new RunState<TContext, Agent<TContext, TOutput>>(
+    // Initialize run state (async factory handles UIMessage[] conversion in AI SDK v6)
+    const state = await RunState.create<TContext, Agent<TContext, TOutput>>(
       agent,
       input,
       context,
@@ -276,13 +290,27 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
       try {
         return await this.executeAgentLoop(agent, state, contextWrapper, maxTurns);
       } catch (error) {
-        if (state.currentAgentSpan) {
-          state.currentAgentSpan.end({
-            output: { error: String(error) },
-            level: 'ERROR',
-          });
+        // Emit agent_end event on error so lifecycle listeners get matched start/end
+        try {
+          this.emit('agent_end', contextWrapper, agent, null as any);
+          agent.emit('agent_end', contextWrapper, null as any);
+        } catch (_eventError) {
+          // Event errors must never mask the original error
+        }
+        try {
+          if (state.currentAgentSpan) {
+            state.currentAgentSpan.end({
+              output: { error: sanitizeError(error) },
+              level: 'ERROR',
+            });
+          }
+        } catch (_tracingError) {
+          // Tracing errors must never break execution
         }
         throw error;
+      } finally {
+        // Clean up runner listeners to prevent memory leaks (ADR-001)
+        this.dispose();
       }
     });
   }
@@ -296,6 +324,9 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
     contextWrapper: RunContextWrapper<TContext>,
     maxTurns: number
   ): Promise<RunResult<TOutput>> {
+    const MAX_GUARDRAIL_RETRIES = 3;
+    let guardrailRetryCount = 0;
+
     try {
       // Main agentic execution loop
       while (!state.isMaxTurnsExceeded()) {
@@ -306,16 +337,20 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
         if (!state.currentAgentSpan || state.currentAgentSpan._agentName !== state.currentAgent.name) {
           if (state.currentAgentSpan) {
             // End previous agent span with accumulated token usage
-            const prevAgentName = state.currentAgentSpan._agentName;
-            const prevAgentMetrics = prevAgentName ? state.agentMetrics.get(prevAgentName) : null;
-            
-            state.currentAgentSpan.end({
-              usage: prevAgentMetrics ? {
-                input: prevAgentMetrics.tokens.input,
-                output: prevAgentMetrics.tokens.output,
-                total: prevAgentMetrics.tokens.total
-              } : undefined
-            });
+            try {
+              const prevAgentName = state.currentAgentSpan._agentName;
+              const prevAgentMetrics = prevAgentName ? state.agentMetrics.get(prevAgentName) : null;
+
+              state.currentAgentSpan.end({
+                usage: prevAgentMetrics ? {
+                  input: prevAgentMetrics.tokens.input,
+                  output: prevAgentMetrics.tokens.output,
+                  total: prevAgentMetrics.tokens.total
+                } : undefined
+              });
+            } catch (_tracingError) {
+              // Tracing errors must never break execution
+            }
           }
 
           // Create span as direct child of trace to maintain proper hierarchy
@@ -357,15 +392,23 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
         });
 
         if (tokenBudget.isEnabled()) {
-          let estimatedInputTokens = await tokenBudget.estimateTokens(systemMessage);
-          for (const msg of state.messages) {
-            estimatedInputTokens += await tokenBudget.estimateTokens(JSON.stringify(msg.content));
+          let estimatedInputTokens = 0;
+          try {
+            estimatedInputTokens = await tokenBudget.estimateTokens(systemMessage);
+            for (const msg of state.messages) {
+              estimatedInputTokens += await tokenBudget.estimateTokens(JSON.stringify(msg.content));
+            }
+
+            if (tools && Object.keys(tools).length > 0) {
+              estimatedInputTokens += await tokenBudget.estimateTokens(tools);
+            }
+          } catch (_tokenError) {
+            // Fallback: rough estimate of 4 chars per token
+            const totalChars = systemMessage.length +
+              state.messages.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0);
+            estimatedInputTokens = Math.ceil(totalChars / 4);
           }
-          
-          if (tools && Object.keys(tools).length > 0) {
-            estimatedInputTokens += await tokenBudget.estimateTokens(tools);
-          }
-          
+
           tokenBudget.setInitialContext(estimatedInputTokens);
           
           if (tokenBudget.isInitialContextExceeded()) {
@@ -398,24 +441,28 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
             if (lastAssistantOutput) {
               // Return the last output even though it may have failed guardrails
               // Better to return something than to error out
-              if (state.currentAgentSpan) {
-                state.currentAgentSpan.end({
-                  output: lastAssistantOutput,
-                  metadata: {
-                    reason: 'token_limit_exceeded',
-                    guardrailBypassed: true
-                  }
-                });
-              }
-              
-              if (state.trace) {
-                state.trace.update({
-                  output: lastAssistantOutput,
-                  metadata: {
-                    tokenLimitExceeded: true,
-                    guardrailBypassed: true
-                  }
-                });
+              try {
+                if (state.currentAgentSpan) {
+                  state.currentAgentSpan.end({
+                    output: lastAssistantOutput,
+                    metadata: {
+                      reason: 'token_limit_exceeded',
+                      guardrailBypassed: true
+                    }
+                  });
+                }
+
+                if (state.trace) {
+                  state.trace.update({
+                    output: lastAssistantOutput,
+                    metadata: {
+                      tokenLimitExceeded: true,
+                      guardrailBypassed: true
+                    }
+                  });
+                }
+              } catch (_tracingError) {
+                // Tracing errors must never break execution
               }
               
               await this.flushTraces();
@@ -434,6 +481,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
                   handoffChain: state.handoffChain.length > 0 ? state.handoffChain : undefined,
                   agentMetrics: Array.from(state.agentMetrics.values()),
                   duration: state.getDuration(),
+                  guardrailBypassed: true,
                 },
               };
             }
@@ -477,38 +525,63 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           }
         });
 
+        // Apply pruneMessages if maxInputTokens is set
+        let messagesToSend = state.messages;
+        const maxInputTokens = state.currentAgent._modelSettings?.maxInputTokens;
+        if (maxInputTokens) {
+          messagesToSend = pruneMessages({
+            messages: state.messages,
+            toolCalls: 'before-last-message',
+            emptyMessages: 'remove',
+          });
+        }
+
+        // Build structured output specification if agent has outputSchema
+        const outputSpec = state.currentAgent._outputSchema
+          ? Output.object({ schema: state.currentAgent._outputSchema as any })
+          : undefined;
+
         // Call model
         const modelResponse = await generateText({
           model: model as LanguageModel,
           system: systemMessage,
-          messages: state.messages,
+          messages: messagesToSend,
           tools: tools as any,
+          output: outputSpec,
           temperature: state.currentAgent._modelSettings?.temperature,
           topP: state.currentAgent._modelSettings?.topP,
           maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
           presencePenalty: state.currentAgent._modelSettings?.presencePenalty,
           frequencyPenalty: state.currentAgent._modelSettings?.frequencyPenalty,
+          experimental_repairToolCall: state.currentAgent._toolCallRepair as ToolCallRepairFunction<ToolSet> | undefined,
+          stopWhen: state.currentAgent._stopWhen as StopCondition<ToolSet> | StopCondition<ToolSet>[] | undefined,
+          activeTools: state.currentAgent._activeTools as any,
+          prepareStep: state.currentAgent._prepareStep as PrepareStepFunction<ToolSet> | undefined,
         } as any);
 
         // End generation with proper usage tracking
-        if (generation) {
-          const usage = modelResponse.usage || {};
-          generation.end({
-            output: {
-              text: modelResponse.text,
-              toolCalls: modelResponse.toolCalls?.length || 0,
-              finishReason: modelResponse.finishReason
-            },
-            // Use Langfuse's usage parameter to track tokens properly
-            usage: {
-              input: usage.inputTokens || 0,
-              output: usage.outputTokens || 0,
-              total: usage.totalTokens || 0,
-            },
-            metadata: {
-              finishReason: modelResponse.finishReason,
-            }
-          });
+        try {
+          if (generation) {
+            const usage = modelResponse.usage || {};
+            generation.end({
+              output: {
+                text: modelResponse.text,
+                toolCalls: modelResponse.toolCalls?.length || 0,
+                finishReason: modelResponse.finishReason
+              },
+              // Use Langfuse's usage parameter to track tokens properly
+              usage: {
+                input: usage.inputTokens || 0,
+                output: usage.outputTokens || 0,
+                total: usage.totalTokens || 0,
+              },
+              metadata: {
+                finishReason: modelResponse.finishReason,
+              }
+            });
+          }
+        } catch (_tracingError) {
+          // Tracing errors must never break execution
         }
 
         // Execute single step with AUTONOMOUS decision making
@@ -558,25 +631,40 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
             }
           }
           
-          if (!guardrailResult.passed && canRetry) {
+          if (!guardrailResult.passed && canRetry && guardrailRetryCount < MAX_GUARDRAIL_RETRIES) {
             // Guardrail failed but we can retry - add feedback and loop
+            guardrailRetryCount++;
             state.messages.push({
               role: 'system',
               content: guardrailResult.feedback || 'Please regenerate your response.'
             });
             continue;
           }
-          
-          // Either guardrail passed OR we can't retry (token limit) - return current output
+
+          // Reset retry count on success
+          if (guardrailResult.passed) {
+            guardrailRetryCount = 0;
+          }
+
+          // If guardrails failed and we can't retry (or retries exhausted), reject the output for safety
+          if (!guardrailResult.passed && (!canRetry || guardrailRetryCount >= MAX_GUARDRAIL_RETRIES)) {
+            nextStep.output = `[Output blocked: content did not pass safety guardrails and retry budget exhausted]`;
+          }
 
           // Parse output if schema provided
+          // Prefer AI SDK v6 native structured output, fall back to JSON.parse
           let finalOutput: TOutput;
           if (state.currentAgent._outputSchema) {
-            try {
-              const parsed = JSON.parse(nextStep.output);
-              finalOutput = state.currentAgent._outputSchema.parse(parsed);
-            } catch {
-              finalOutput = nextStep.output as TOutput;
+            const nativeOutput = (modelResponse as any).output ?? (modelResponse as any).experimental_output;
+            if (nativeOutput !== undefined && nativeOutput !== null) {
+              finalOutput = nativeOutput as TOutput;
+            } else {
+              try {
+                const parsed = JSON.parse(nextStep.output);
+                finalOutput = state.currentAgent._outputSchema.parse(parsed);
+              } catch {
+                finalOutput = nextStep.output as TOutput;
+              }
             }
           } else {
             finalOutput = nextStep.output as TOutput;
@@ -589,17 +677,21 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
             : JSON.stringify(finalOutput, null, 2);
 
           // End agent span with accumulated token usage
-          if (state.currentAgentSpan) {
-            const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
-            
-            state.currentAgentSpan.end({
-              output: finalOutputString,
-              usage: agentMetrics ? {
-                input: agentMetrics.tokens.input,
-                output: agentMetrics.tokens.output,
-                total: agentMetrics.tokens.total
-              } : undefined
-            });
+          try {
+            if (state.currentAgentSpan) {
+              const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
+
+              state.currentAgentSpan.end({
+                output: finalOutputString,
+                usage: agentMetrics ? {
+                  input: agentMetrics.tokens.input,
+                  output: agentMetrics.tokens.output,
+                  total: agentMetrics.tokens.total
+                } : undefined
+              });
+            }
+          } catch (_tracingError) {
+            // Tracing errors must never break execution
           }
 
           // Emit agent_end event
@@ -607,23 +699,26 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           agent.emit('agent_end', contextWrapper, finalOutputString as any);
 
           // Update trace with final output and aggregated metadata
-          if (state.trace) {
-            state.trace.update({
-              output: finalOutputString, // Just the text, not an object
-              metadata: {
-                agentPath: state.handoffChain.length > 0 ? state.handoffChain : [agent.name],
-                success: true,
-                totalTokens: state.usage.totalTokens,
-                promptTokens: state.usage.inputTokens,
-                completionTokens: state.usage.outputTokens,
-                totalCost: (state.usage.totalTokens || 0) * 0.00000015, // ~$0.15 per 1M tokens
-                duration: state.getDuration(),
-                agentCount: state.agentMetrics.size,
-                totalToolCalls: state.steps.reduce((sum, s) => sum + (s.toolCalls?.length || 0), 0),
-                totalTransfers: state.handoffChain.length,
-                finishReason: stepResult.stepResult?.finishReason,
-              }
-            });
+          try {
+            if (state.trace) {
+              state.trace.update({
+                output: finalOutputString, // Just the text, not an object
+                metadata: {
+                  agentPath: state.handoffChain.length > 0 ? state.handoffChain : [agent.name],
+                  success: true,
+                  totalTokens: state.usage.totalTokens,
+                  promptTokens: state.usage.inputTokens,
+                  completionTokens: state.usage.outputTokens,
+                  duration: state.getDuration(),
+                  agentCount: state.agentMetrics.size,
+                  totalToolCalls: state.steps.reduce((sum, s) => sum + (s.toolCalls?.length || 0), 0),
+                  totalTransfers: state.handoffChain.length,
+                  finishReason: stepResult.stepResult?.finishReason,
+                }
+              });
+            }
+          } catch (_tracingError) {
+            // Tracing errors must never break execution
           }
 
           // Flush Langfuse traces before returning
@@ -648,31 +743,36 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           };
         } else if (nextStep.type === NextStepType.HANDOFF) {
           // Agent decided to transfer to another agent
-          if (state.currentAgentSpan) {
-            const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
-            
-            state.currentAgentSpan.end({
-              output: {
-                transferTo: nextStep.newAgent.name,
-                transferReason: nextStep.reason,
-              },
-              metadata: {
-                type: 'transfer',
-                isolated: true,  // Context isolation enabled
-                // Include usage in metadata for Langfuse visibility
+          try {
+            if (state.currentAgentSpan) {
+              const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
+
+              state.currentAgentSpan.end({
+                output: {
+                  transferTo: nextStep.newAgent.name,
+                  transferReason: nextStep.reason,
+                },
+                metadata: {
+                  type: 'transfer',
+                  isolated: true,  // Context isolation enabled
+                  // Include usage in metadata for Langfuse visibility
+                  usage: agentMetrics ? {
+                    input: agentMetrics.tokens.input,
+                    output: agentMetrics.tokens.output,
+                    total: agentMetrics.tokens.total
+                  } : undefined
+                },
                 usage: agentMetrics ? {
                   input: agentMetrics.tokens.input,
                   output: agentMetrics.tokens.output,
                   total: agentMetrics.tokens.total
                 } : undefined
-              },
-              usage: agentMetrics ? {
-                input: agentMetrics.tokens.input,
-                output: agentMetrics.tokens.output,
-                total: agentMetrics.tokens.total
-              } : undefined
-            });
+              });
+              state.currentAgentSpan = undefined;
+            }
+          } catch (_tracingError) {
             state.currentAgentSpan = undefined;
+            // Tracing errors must never break execution
           }
 
           // Track transfer in chain
@@ -737,13 +837,262 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
       // Max turns exceeded
       throw new Error(`Max turns (${maxTurns}) exceeded`);
     } catch (error) {
-      if (state.currentAgentSpan) {
-        state.currentAgentSpan.end({
-          output: { error: String(error) },
-          level: 'ERROR',
-        });
+      try {
+        if (state.currentAgentSpan) {
+          state.currentAgentSpan.end({
+            output: { error: sanitizeError(error) },
+            level: 'ERROR',
+          });
+        }
+      } catch (_tracingError) {
+        // Tracing errors must never break execution
       }
       throw error;
+    }
+  }
+
+  /**
+   * Execute an agent run with real streaming via streamText()
+   *
+   * Yields StreamEvent objects as the model generates text and calls tools.
+   * Uses the same turn loop as execute() but swaps generateText for streamText.
+   */
+  async *executeStream(
+    agent: Agent<TContext, TOutput>,
+    input: string | ModelMessage[],
+    options: RunOptions<TContext> = {}
+  ): AsyncGenerator<StreamEvent, RunResult<TOutput>, undefined> {
+    const mergedOptions = { ...this.options, ...options };
+    const context = mergedOptions.context || ({} as TContext);
+    const maxTurns = mergedOptions.maxTurns || 50;
+
+    const state = await RunState.create<TContext, Agent<TContext, TOutput>>(
+      agent,
+      input,
+      context,
+      maxTurns
+    );
+
+    isLangfuseEnabled();
+
+    let trace = getCurrentTrace();
+    if (!trace && isLangfuseEnabled()) {
+      const initialInput = typeof input === 'string'
+        ? input
+        : input.find((m) => m.role === 'user')?.content || input;
+
+      trace = createTrace({
+        name: `Agent Run (Stream)`,
+        input: initialInput,
+        metadata: { initialAgent: agent.name, maxTurns },
+        tags: ['agent', 'run', 'agentic', 'stream'],
+      });
+    }
+    state.trace = trace;
+
+    const contextWrapper = this.getContextWrapper(agent, state);
+
+    // Run input guardrails (non-streaming phase)
+    await this.runInputGuardrails(agent, state);
+
+    this.emit('agent_start', contextWrapper, agent);
+    agent.emit('agent_start', contextWrapper, agent);
+
+    yield { type: 'agent-start', agentName: agent.name };
+
+    try {
+      while (!state.isMaxTurnsExceeded()) {
+        state.incrementTurn();
+
+        yield { type: 'step-start', stepNumber: state.currentTurn };
+
+        const systemMessage = await state.currentAgent.getInstructions(contextWrapper);
+        const model = state.currentAgent._model;
+        const toolsDisabledDueToTokenLimit = state._toolsDisabledDueToTokenLimit;
+        const tools = toolsDisabledDueToTokenLimit ? {} : state.currentAgent._tools;
+
+        // Apply pruneMessages if configured
+        let messagesToSend = state.messages;
+        const maxInputTokens = state.currentAgent._modelSettings?.maxInputTokens;
+        if (maxInputTokens) {
+          messagesToSend = pruneMessages({
+            messages: state.messages,
+            toolCalls: 'before-last-message',
+            emptyMessages: 'remove',
+          });
+        }
+
+        // Build structured output specification
+        const outputSpec = state.currentAgent._outputSchema
+          ? Output.object({ schema: state.currentAgent._outputSchema as any })
+          : undefined;
+
+        // Use streamText instead of generateText
+        const streamResult = streamText({
+          model: model as LanguageModel,
+          system: systemMessage,
+          messages: messagesToSend,
+          tools: tools as any,
+          output: outputSpec,
+          temperature: state.currentAgent._modelSettings?.temperature,
+          topP: state.currentAgent._modelSettings?.topP,
+          maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
+          presencePenalty: state.currentAgent._modelSettings?.presencePenalty,
+          frequencyPenalty: state.currentAgent._modelSettings?.frequencyPenalty,
+          experimental_repairToolCall: state.currentAgent._toolCallRepair as ToolCallRepairFunction<ToolSet> | undefined,
+          stopWhen: state.currentAgent._stopWhen as StopCondition<ToolSet> | StopCondition<ToolSet>[] | undefined,
+          activeTools: state.currentAgent._activeTools as any,
+          prepareStep: state.currentAgent._prepareStep as PrepareStepFunction<ToolSet> | undefined,
+        } as any);
+
+        // Stream text deltas and tool events to the caller
+        for await (const part of streamResult.fullStream) {
+          const p = part as any;
+          if (p.type === 'text-delta') {
+            yield { type: 'text-delta', textDelta: p.text };
+          } else if (p.type === 'tool-call') {
+            yield {
+              type: 'tool-call',
+              toolName: p.toolName,
+              args: p.input,
+              toolCallId: p.toolCallId,
+            };
+          } else if (p.type === 'tool-result') {
+            yield {
+              type: 'tool-result',
+              toolName: p.toolName,
+              result: p.output,
+              toolCallId: p.toolCallId,
+            };
+          }
+        }
+
+        // After stream completes, get the full result for state management
+        const finalText = await streamResult.text;
+        const finalToolCalls = await streamResult.toolCalls;
+        const finalUsage = await streamResult.usage;
+        const finishReason = await streamResult.finishReason;
+
+        // Build a modelResponse-like object for executeSingleStep
+        const modelResponse = {
+          text: finalText,
+          toolCalls: finalToolCalls,
+          toolResults: await streamResult.toolResults,
+          finishReason,
+          usage: finalUsage,
+          steps: await streamResult.steps,
+          response: await streamResult.response,
+        };
+
+        // Execute step to update state (tool execution already happened via streamText)
+        const stepResult = await executeSingleStep(
+          state.currentAgent,
+          state,
+          contextWrapper,
+          modelResponse as any
+        );
+
+        state.messages = stepResult.messages;
+
+        yield { type: 'step-complete', stepNumber: state.currentTurn };
+
+        const nextStep = stepResult.nextStep;
+
+        if (nextStep.type === NextStepType.FINAL_OUTPUT) {
+          // Parse structured output
+          let finalOutput: TOutput;
+          if (state.currentAgent._outputSchema) {
+            const nativeOutput = (modelResponse as any).output ?? (modelResponse as any).experimental_output;
+            if (nativeOutput !== undefined && nativeOutput !== null) {
+              finalOutput = nativeOutput as TOutput;
+            } else {
+              try {
+                const parsed = JSON.parse(nextStep.output);
+                finalOutput = state.currentAgent._outputSchema.parse(parsed);
+              } catch {
+                finalOutput = nextStep.output as TOutput;
+              }
+            }
+          } else {
+            finalOutput = nextStep.output as TOutput;
+          }
+
+          const finalOutputString = typeof finalOutput === 'string'
+            ? finalOutput
+            : JSON.stringify(finalOutput, null, 2);
+
+          this.emit('agent_end', contextWrapper, agent, finalOutputString as any);
+          agent.emit('agent_end', contextWrapper, finalOutputString as any);
+
+          yield { type: 'agent-end', agentName: agent.name };
+          yield { type: 'finish', finishReason: stepResult.stepResult?.finishReason };
+
+          await this.flushTraces();
+
+          return {
+            finalOutput: finalOutputString as TOutput,
+            messages: state.messages,
+            steps: state.steps,
+            state,
+            metadata: {
+              totalTokens: state.usage.totalTokens,
+              promptTokens: state.usage.inputTokens,
+              completionTokens: state.usage.outputTokens,
+              finishReason: stepResult.stepResult?.finishReason,
+              totalToolCalls: state.steps.reduce((sum, s) => sum + s.toolCalls.length, 0),
+              handoffChain: state.handoffChain.length > 0 ? state.handoffChain : undefined,
+              agentMetrics: Array.from(state.agentMetrics.values()),
+              duration: state.getDuration(),
+            },
+          };
+        } else if (nextStep.type === NextStepType.HANDOFF) {
+          state.trackHandoff(nextStep.newAgent.name);
+          const previousAgent = state.currentAgent;
+          state.currentAgent = nextStep.newAgent as any;
+
+          yield {
+            type: 'transfer',
+            from: previousAgent.name,
+            to: nextStep.newAgent.name,
+            reason: nextStep.reason || '',
+          };
+
+          this.emit('agent_handoff', contextWrapper, previousAgent, nextStep.newAgent);
+          previousAgent.emit('agent_handoff', contextWrapper, nextStep.newAgent);
+
+          // Context isolation
+          const originalUserMessage = Array.isArray(state.originalInput)
+            ? state.originalInput.filter((m: any) => m.role === 'user')
+            : [{ role: 'user' as const, content: state.originalInput }];
+
+          state.messages = [...originalUserMessage];
+          state._toolsDisabledDueToTokenLimit = false;
+
+          if (nextStep.reason) {
+            state.messages.push({
+              role: 'system',
+              content: `[Transfer] Transferred to ${nextStep.newAgent.name}. Reason: ${nextStep.reason}${nextStep.context ? `. Context: ${nextStep.context}` : ''}`,
+            });
+          }
+
+          yield { type: 'agent-start', agentName: nextStep.newAgent.name };
+          continue;
+        } else if (nextStep.type === NextStepType.RUN_AGAIN) {
+          continue;
+        }
+      }
+
+      throw new Error(`Max turns (${maxTurns}) exceeded`);
+    } catch (error) {
+      try {
+        this.emit('agent_end', contextWrapper, agent, null as any);
+        agent.emit('agent_end', contextWrapper, null as any);
+      } catch (_eventError) {
+        // Event errors must never mask the original error
+      }
+      throw error;
+    } finally {
+      this.dispose();
     }
   }
 
@@ -835,7 +1184,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
         } catch (error) {
           if (guardrailSpan) {
             guardrailSpan.end({
-              output: { error: String(error) },
+              output: { error: sanitizeError(error) },
               level: 'ERROR'
             });
           }
@@ -977,17 +1326,20 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
         
         if (guardrailSpan) guardrailSpan.end();
       } catch (error) {
-        if (guardrailSpan) {
-          guardrailSpan.end({
-            output: { error: String(error) },
-            level: 'ERROR'
-          });
+        try {
+          if (guardrailSpan) {
+            guardrailSpan.end({
+              output: { error: sanitizeError(error) },
+              level: 'ERROR'
+            });
+          }
+          if (guardrailsSpan) guardrailsSpan.end({ level: 'ERROR' });
+        } catch (_tracingError) {
+          // Tracing errors must never break execution
         }
-        // Return error as feedback
-        if (guardrailsSpan) guardrailsSpan.end({ level: 'ERROR' });
         return {
           passed: false,
-          feedback: `Guardrail check failed: ${String(error)}. Please regenerate your response.`
+          feedback: `Guardrail check failed: ${sanitizeError(error)}. Please regenerate your response.`
         };
       }
     }

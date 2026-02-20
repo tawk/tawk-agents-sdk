@@ -19,7 +19,16 @@
  * @version 1.0.0
  */
 
-import type { ModelMessage, LanguageModel, Schema, JSONSchema7 } from 'ai';
+import type {
+  ModelMessage,
+  LanguageModel,
+  Schema,
+  JSONSchema7,
+  ToolCallRepairFunction,
+  StopCondition,
+  PrepareStepFunction,
+  ToolSet,
+} from 'ai';
 import type { z } from 'zod';
 import type { Usage } from '../usage';
 
@@ -127,6 +136,8 @@ export interface AgentConfig<TContext = any, TOutput = string> {
     topP?: number;
     responseTokens?: number;
     maxTokens?: number;
+    /** Maximum input tokens — when set, pruneMessages() is applied before each model call */
+    maxInputTokens?: number;
     presencePenalty?: number;
     frequencyPenalty?: number;
   };
@@ -135,6 +146,14 @@ export interface AgentConfig<TContext = any, TOutput = string> {
   onStepFinish?: (step: StepResult) => void | Promise<void>;
   shouldFinish?: (context: TContext, toolResults: any[]) => boolean;
   useTOON?: boolean;
+  /** Auto-repair malformed tool call arguments from the model */
+  toolCallRepair?: ToolCallRepairFunction<ToolSet>;
+  /** Condition(s) for stopping multi-step execution when there are tool results */
+  stopWhen?: StopCondition<ToolSet> | StopCondition<ToolSet>[];
+  /** Limit available tools per step without changing type signatures */
+  activeTools?: string[];
+  /** Dynamically adjust settings before each model generation step */
+  prepareStep?: PrepareStepFunction<ToolSet>;
 }
 
 // ============================================
@@ -323,7 +342,7 @@ export interface StreamChunk {
 /**
  * Execution state for resuming a paused agent run (e.g., for human-in-the-loop).
  * 
- * @property {Agent} agent - The agent being executed
+ * @property {Agent} currentAgent - The agent being executed
  * @property {ModelMessage[]} messages - Current conversation messages
  * @property {any} context - Execution context
  * @property {number} stepNumber - Current step number
@@ -333,7 +352,7 @@ export interface StreamChunk {
  * @property {boolean} pendingApprovals[].approved - Whether approval was granted
  */
 export interface RunState {
-  agent: any; // Agent<any, any> - circular dependency resolved at runtime
+  currentAgent: any; // Agent<any, any> - circular dependency resolved at runtime
   messages: ModelMessage[];
   context: any;
   stepNumber: number;

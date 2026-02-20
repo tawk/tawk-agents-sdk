@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { spawn, type ChildProcess } from 'child_process';
 import type { MCPServerConfig, MCPTool, ToolDefinition } from '../types/types';
 
+const MAX_BUFFER_SIZE = 10 * 1024 * 1024; // 10MB max buffer for MCP stdout
+
 // ============================================
 // MCP SERVER MANAGER
 // ============================================
@@ -168,10 +170,32 @@ class MCPServer {
 
   constructor(private config: MCPServerConfig) {}
 
+  private validateCommand(): void {
+    const command = this.config.command;
+    if (!command) throw new Error('MCP command is required for stdio transport');
+
+    // Block obviously dangerous commands
+    const blockedCommands = ['rm', 'mkfs', 'dd', 'shutdown', 'reboot', 'kill', 'killall'];
+    const basename = command.split('/').pop() || command;
+    if (blockedCommands.includes(basename)) {
+      throw new Error(`MCP command blocked for security: ${basename}`);
+    }
+  }
+
   async start(): Promise<void> {
+    this.validateCommand();
+
     return new Promise((resolve, reject) => {
+      // Only pass explicitly configured env vars + minimal required vars (PATH, HOME, NODE_ENV)
+      // to avoid leaking secrets (API keys, DB credentials, etc.) to child processes
+      const safeEnv: Record<string, string> = {};
+      if (process.env.PATH) safeEnv.PATH = process.env.PATH;
+      if (process.env.HOME) safeEnv.HOME = process.env.HOME;
+      if (process.env.NODE_ENV) safeEnv.NODE_ENV = process.env.NODE_ENV;
+      if (process.env.SHELL) safeEnv.SHELL = process.env.SHELL;
+
       this.process = spawn(this.config.command, this.config.args || [], {
-        env: { ...process.env, ...this.config.env },
+        env: { ...safeEnv, ...this.config.env },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -184,6 +208,13 @@ class MCPServer {
       let buffer = '';
       this.process.stdout.on('data', (data) => {
         buffer += data.toString();
+        if (buffer.length > MAX_BUFFER_SIZE) {
+          this.process?.kill();
+          // Emit error instead of throwing — throwing inside event handler crashes the process
+          this.process?.emit('error', new Error(`MCP server stdout buffer exceeded ${MAX_BUFFER_SIZE} bytes`));
+          buffer = '';
+          return;
+        }
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 

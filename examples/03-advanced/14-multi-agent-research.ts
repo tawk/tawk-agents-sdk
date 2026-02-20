@@ -323,7 +323,7 @@ When you receive a research report, process it and return the complete report wi
         const urls = findings.match(urlRegex) || [];
         
         return {
-          sources: urls.map((url, i) => ({
+          sources: urls.map((url: string, i: number) => ({
             url,
             title: `Source ${i + 1}`,
             citationKey: `source-${i + 1}`,
@@ -396,7 +396,7 @@ CRITICAL RULES:
         context.context.memory.set('researchPlan', plan);
         
         console.log(`   ✅ Research plan created:`);
-        steps.forEach((step, idx) => {
+        steps.forEach((step: ResearchStep, _idx: number) => {
           console.log(`      Step ${step.stepNumber}: ${step.focus} (${step.priority} priority, ${step.estimatedComplexity} complexity)`);
         });
         console.log(`      Next step: Call execute_research_steps with the steps array\n`);

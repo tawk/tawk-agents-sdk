@@ -36,22 +36,23 @@ import { Usage } from './usage';
 /**
  * Convert input messages to ModelMessage format.
  * Handles both UIMessage[] and ModelMessage[] inputs.
- * 
+ * In AI SDK v6, convertToModelMessages is async.
+ *
  * @param messages - Input messages (UIMessage[] or ModelMessage[])
- * @returns ModelMessage[]
+ * @returns Promise<ModelMessage[]>
  */
-function toModelMessages(messages: unknown[]): ModelMessage[] {
+async function toModelMessages(messages: unknown[]): Promise<ModelMessage[]> {
   // Check if this looks like UIMessage[] (has 'id' property typical of UIMessage)
-  const isUIMessages = messages.length > 0 && 
-    typeof messages[0] === 'object' && 
+  const isUIMessages = messages.length > 0 &&
+    typeof messages[0] === 'object' &&
     messages[0] !== null &&
     'id' in messages[0];
-  
+
   if (isUIMessages) {
-    // Convert UIMessage[] to ModelMessage[]
-    return convertToModelMessages(messages as UIMessage[]);
+    // Convert UIMessage[] to ModelMessage[] (async in AI SDK v6)
+    return await convertToModelMessages(messages as UIMessage[]);
   }
-  
+
   // Already ModelMessage[] format - return as-is
   return messages as ModelMessage[];
 }
@@ -185,24 +186,38 @@ export class RunState<TContext = any, TAgent extends Agent<TContext, any> = Agen
   public _tokenBudget?: any;
   public _toolsDisabledDueToTokenLimit: boolean = false;
 
-  // Legacy compatibility properties
-  public items: any[] = [];
-  public modelResponses: any[] = [];
-  public agent: TAgent; // Alias for currentAgent
+
+  /**
+   * Async factory — use this when input may be UIMessage[] (requires async conversion in AI SDK v6).
+   * For string or ModelMessage[] input, the constructor can still be used directly.
+   */
+  static async create<TC = any, TA extends Agent<TC, any> = Agent<any, any>>(
+    agent: TA,
+    input: string | ModelMessage[],
+    context: TC,
+    maxTurns: number = 50
+  ): Promise<RunState<TC, TA>> {
+    const messages = Array.isArray(input)
+      ? await toModelMessages(input)
+      : [{ role: 'user' as const, content: input }];
+    return new RunState(agent, input, context, maxTurns, messages);
+  }
 
   constructor(
     agent: TAgent,
     input: string | ModelMessage[],
     context: TContext,
-    maxTurns: number = 50
+    maxTurns: number = 50,
+    messages?: ModelMessage[]
   ) {
     this.currentAgent = agent;
-    this.agent = agent; // Set alias
     this.originalInput = input;
-    // Convert input to ModelMessage format - handles both UIMessage[] and ModelMessage[]
-    this.messages = Array.isArray(input) 
-      ? toModelMessages(input) 
-      : [{ role: 'user' as const, content: input }];
+    // Use pre-converted messages if provided, otherwise assume input is already ModelMessage[] or string
+    this.messages = messages ?? (
+      Array.isArray(input)
+        ? (input as ModelMessage[])
+        : [{ role: 'user' as const, content: input }]
+    );
     this.context = context;
     this.maxTurns = maxTurns;
     this.currentTurn = 0;
@@ -219,23 +234,6 @@ export class RunState<TContext = any, TAgent extends Agent<TContext, any> = Agen
   recordStep(step: StepResult): void {
     this.steps.push(step);
     this.stepNumber++;
-    
-    // Update legacy items array
-    for (const toolCall of step.toolCalls) {
-      this.items.push({
-        type: 'tool_call',
-        toolName: toolCall.toolName,
-        args: toolCall.args,
-        result: toolCall.result,
-      });
-    }
-    
-    if (step.text) {
-      this.items.push({
-        role: 'assistant',
-        content: step.text,
-      });
-    }
   }
 
   /**

@@ -38,15 +38,21 @@ import type { ModelMessage } from 'ai';
 
 let langfuseInstance: Langfuse | null = null;
 let isEnabled = false;
+let initAttempted = false;
 
 /**
- * Initialize Langfuse with credentials from environment variables
+ * Initialize Langfuse with credentials from environment variables.
+ * Thread-safe: uses a flag to ensure initialization runs at most once.
  */
 export function initializeLangfuse(): Langfuse | null {
-  // Check if already initialized
+  // Check if already initialized or already attempted
   if (langfuseInstance) {
     return langfuseInstance;
   }
+  if (initAttempted) {
+    return null;
+  }
+  initAttempted = true;
 
   // Check for required environment variables
   const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
@@ -55,26 +61,32 @@ export function initializeLangfuse(): Langfuse | null {
 
   if (!publicKey || !secretKey) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('⚠️  Langfuse not initialized: Missing LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY');
+      console.warn('Langfuse not initialized: Missing LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY');
     }
     return null;
   }
 
   try {
+    const flushAt = parseInt(process.env.LANGFUSE_FLUSH_AT || '15', 10);
+
     langfuseInstance = new Langfuse({
       publicKey,
       secretKey,
       baseUrl,
-      flushAt: 1, // Flush immediately for testing
-      flushInterval: 1000, // Flush every 1 second
+      flushAt, // Configurable via env; defaults to 15 for production batching
+      flushInterval: 1000,
       requestTimeout: 10000,
     });
 
     isEnabled = true;
-    console.log('✅ Langfuse tracing initialized:', baseUrl);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Langfuse tracing initialized:', baseUrl);
+    }
     return langfuseInstance;
   } catch (error) {
-    console.error('❌ Failed to initialize Langfuse:', error);
+    // Sanitize error — don't log credentials
+    const safeMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Failed to initialize Langfuse:', safeMessage);
     return null;
   }
 }
@@ -83,7 +95,7 @@ export function initializeLangfuse(): Langfuse | null {
  * Get the current Langfuse instance (initializes if needed)
  */
 export function getLangfuse(): Langfuse | null {
-  if (!langfuseInstance) {
+  if (!langfuseInstance && !initAttempted) {
     return initializeLangfuse();
   }
   return langfuseInstance;
@@ -94,8 +106,7 @@ export function getLangfuse(): Langfuse | null {
  * Auto-initializes Langfuse if credentials are available
  */
 export function isLangfuseEnabled(): boolean {
-  // Auto-initialize if not already done (lazy initialization)
-  if (!langfuseInstance) {
+  if (!langfuseInstance && !initAttempted) {
     initializeLangfuse();
   }
   return isEnabled && langfuseInstance !== null;
@@ -129,7 +140,7 @@ export function createTrace(options: {
 
     return trace;
   } catch (error) {
-    console.error('Failed to create Langfuse trace:', error);
+    console.error('Failed to create Langfuse trace:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -157,7 +168,7 @@ export function createGeneration(trace: any, options: {
 
     return generation;
   } catch (error) {
-    console.error('Failed to create Langfuse generation:', error);
+    console.error('Failed to create Langfuse generation:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -183,7 +194,7 @@ export function updateGeneration(generation: any, options: {
       metadata: options.metadata,
     });
   } catch (error) {
-    console.error('Failed to update Langfuse generation:', error);
+    console.error('Failed to update Langfuse generation:', error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -206,7 +217,7 @@ export function endGeneration(generation: any, options?: {
       statusMessage: options?.statusMessage,
     });
   } catch (error) {
-    console.error('Failed to end Langfuse generation:', error);
+    console.error('Failed to end Langfuse generation:', error instanceof Error ? error.message : 'Unknown error');
     // Try alternative: update then end
     try {
       if (generation.update) {
@@ -218,7 +229,7 @@ export function endGeneration(generation: any, options?: {
         generation.end();
       }
     } catch (fallbackError) {
-      console.error('Failed to end generation with fallback:', fallbackError);
+      console.error('Failed to end generation with fallback:', fallbackError instanceof Error ? fallbackError.message : 'Unknown error');
     }
   }
 }
@@ -242,7 +253,7 @@ export function createSpan(trace: any, options: {
 
     return span;
   } catch (error) {
-    console.error('Failed to create Langfuse span:', error);
+    console.error('Failed to create Langfuse span:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -264,7 +275,7 @@ export function endSpan(span: any, options?: {
       statusMessage: options?.statusMessage,
     });
   } catch (error) {
-    console.error('Failed to end Langfuse span:', error);
+    console.error('Failed to end Langfuse span:', error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -290,7 +301,7 @@ export function score(options: {
       comment: options.comment,
     });
   } catch (error) {
-    console.error('Failed to score Langfuse trace:', error);
+    console.error('Failed to score Langfuse trace:', error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -304,7 +315,7 @@ export async function flushLangfuse(): Promise<void> {
   try {
     await langfuse.flushAsync();
   } catch (error) {
-    console.error('Failed to flush Langfuse:', error);
+    console.error('Failed to flush Langfuse:', error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -317,10 +328,13 @@ export async function shutdownLangfuse(): Promise<void> {
 
   try {
     await langfuse.shutdownAsync();
+  } catch (error) {
+    const safeMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Failed to shutdown Langfuse:', safeMessage);
+  } finally {
     langfuseInstance = null;
     isEnabled = false;
-  } catch (error) {
-    console.error('Failed to shutdown Langfuse:', error);
+    initAttempted = false;
   }
 }
 
@@ -342,5 +356,16 @@ export function extractModelName(model: any): string {
   if (model?.modelId) return model.modelId;
   if (model?.provider && model?.model) return `${model.provider}/${model.model}`;
   return 'unknown';
+}
+
+// Graceful shutdown handlers
+if (typeof process !== 'undefined') {
+  const gracefulShutdown = async () => {
+    await shutdownLangfuse();
+  };
+
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
+  process.on('beforeExit', gracefulShutdown);
 }
 

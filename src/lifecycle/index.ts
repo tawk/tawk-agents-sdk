@@ -120,6 +120,11 @@ export interface RunHookEvents<TContext = any, TOutput = string> {
  * Agent hooks - event emitter for agent lifecycle
  */
 export class AgentHooks<TContext = any, TOutput = string> extends EventEmitter {
+  constructor() {
+    super();
+    this.setMaxListeners(20);
+  }
+
   /**
    * Register a handler for agent_start event
    */
@@ -154,12 +159,59 @@ export class AgentHooks<TContext = any, TOutput = string> extends EventEmitter {
   onToolEnd(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_tool_end']) => void): this {
     return this.on('agent_tool_end', handler);
   }
+
+  /**
+   * Unregister a handler for agent_start event
+   */
+  offStart(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_start']) => void): this {
+    return this.off('agent_start', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_end event
+   */
+  offEnd(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_end']) => void): this {
+    return this.off('agent_end', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_handoff event
+   */
+  offHandoff(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_handoff']) => void): this {
+    return this.off('agent_handoff', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_tool_start event
+   */
+  offToolStart(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_tool_start']) => void): this {
+    return this.off('agent_tool_start', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_tool_end event
+   */
+  offToolEnd(handler: (...args: AgentHookEvents<TContext, TOutput>['agent_tool_end']) => void): this {
+    return this.off('agent_tool_end', handler);
+  }
+
+  /**
+   * Remove all listeners and clean up
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 /**
  * Run hooks - event emitter for run lifecycle
  */
 export class RunHooks<TContext = any, TOutput = string> extends EventEmitter {
+  constructor() {
+    super();
+    this.setMaxListeners(20);
+  }
+
   /**
    * Register a handler for agent_start event
    */
@@ -193,6 +245,48 @@ export class RunHooks<TContext = any, TOutput = string> extends EventEmitter {
    */
   onToolEnd(handler: (...args: RunHookEvents<TContext, TOutput>['agent_tool_end']) => void): this {
     return this.on('agent_tool_end', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_start event
+   */
+  offAgentStart(handler: (...args: RunHookEvents<TContext, TOutput>['agent_start']) => void): this {
+    return this.off('agent_start', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_end event
+   */
+  offAgentEnd(handler: (...args: RunHookEvents<TContext, TOutput>['agent_end']) => void): this {
+    return this.off('agent_end', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_handoff event
+   */
+  offAgentHandoff(handler: (...args: RunHookEvents<TContext, TOutput>['agent_handoff']) => void): this {
+    return this.off('agent_handoff', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_tool_start event
+   */
+  offToolStart(handler: (...args: RunHookEvents<TContext, TOutput>['agent_tool_start']) => void): this {
+    return this.off('agent_tool_start', handler);
+  }
+
+  /**
+   * Unregister a handler for agent_tool_end event
+   */
+  offToolEnd(handler: (...args: RunHookEvents<TContext, TOutput>['agent_tool_end']) => void): this {
+    return this.off('agent_tool_end', handler);
+  }
+
+  /**
+   * Remove all listeners and clean up
+   */
+  dispose(): void {
+    this.removeAllListeners();
   }
 }
 

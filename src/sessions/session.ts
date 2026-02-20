@@ -63,9 +63,15 @@ export class MemorySession<TContext = any> implements Session<TContext> {
    * @param {number} [maxMessages] - Maximum number of messages to keep (sliding window)
    * @param {SummarizationConfig} [summarizationConfig] - Optional auto-summarization config
    */
+  /**
+   * Default max messages to prevent unbounded memory growth.
+   * Set explicitly via constructor to override.
+   */
+  private static readonly DEFAULT_MAX_MESSAGES = 200;
+
   constructor(id: string, maxMessages?: number, summarizationConfig?: SummarizationConfig) {
     this.id = id;
-    this.maxMessages = maxMessages;
+    this.maxMessages = maxMessages ?? MemorySession.DEFAULT_MAX_MESSAGES;
     this.summarizationConfig = summarizationConfig;
   }
 
@@ -354,8 +360,16 @@ export class RedisSession<TContext = any> implements Session<TContext> {
       // Set TTL
       pipeline.expire(key, this.ttl);
       
-      // Execute all commands in one round-trip
-      await pipeline.exec();
+      // Execute all commands in one round-trip and check for errors
+      const pipelineResults = await pipeline.exec();
+      if (pipelineResults) {
+        const firstError = pipelineResults.find(r => r[0] !== null);
+        if (firstError && firstError[0]) {
+          throw firstError[0] instanceof Error
+            ? firstError[0]
+            : new Error(String(firstError[0]));
+        }
+      }
     }
   }
 
@@ -498,19 +512,26 @@ Summary (2-3 paragraphs):`;
 
   async updateMetadata(metadata: Record<string, any>): Promise<void> {
     const key = this.getMetadataKey();
-    
-    // Get existing metadata
-    const existingMetadata = await this.getMetadata();
-    
-    // Merge with new metadata
-    const updatedMetadata = { ...existingMetadata, ...metadata };
-    
-    // Save back to Redis with TTL
-    await this.redis.setex(
-      key,
-      this.ttl,
-      JSON.stringify(updatedMetadata)
-    );
+
+    // Atomic read-modify-write using Lua script
+    const luaScript = `
+      local key = KEYS[1]
+      local ttl = tonumber(ARGV[1])
+      local newData = cjson.decode(ARGV[2])
+      local existing = redis.call('GET', key)
+      local merged = {}
+      if existing then
+        merged = cjson.decode(existing)
+      end
+      for k, v in pairs(newData) do
+        merged[k] = v
+      end
+      redis.call('SETEX', key, ttl, cjson.encode(merged))
+      return 'OK'
+    `;
+
+    await this.redis.eval(luaScript, 1, key, this.ttl.toString(), JSON.stringify(metadata));
+    await this.refreshTTL();
   }
 
   /**
@@ -629,11 +650,11 @@ export class DatabaseSession<TContext = any> implements Session<TContext> {
     }
     
     // Atomic operation using MongoDB's $push, $each, and $slice operators
+    // Note: $each without $position appends at end (default behavior)
     const updateDoc: any = {
       $push: {
         messages: {
           $each: messages,
-          $position: -1, // Append at end
         }
       },
       $set: { updatedAt: new Date() },
@@ -956,20 +977,25 @@ export class HybridSession<TContext = any> implements Session<TContext> {
   async syncToDatabase(): Promise<void> {
     const messages = await this.redisSession.getHistory();
     const metadata = await this.redisSession.getMetadata();
-    
-    // Clear DB session first
-    await this.dbSession.clear();
-    
-    // Add all messages
-    if (messages.length > 0) {
-      await this.dbSession.addMessages(messages);
-    }
-    
-    // Update metadata
-    if (Object.keys(metadata).length > 0) {
-      await this.dbSession.updateMetadata(metadata);
-    }
-    
+
+    // Use atomic $set instead of clear+add to prevent data loss if process crashes mid-sync
+    const collection = (this.dbSession as any).getCollection();
+    await collection.updateOne(
+      { sessionId: this.id },
+      {
+        $set: {
+          messages,
+          metadata,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          sessionId: this.id,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
     this.messagesSinceSync = 0;
   }
 }
@@ -1049,9 +1075,12 @@ export interface SessionManagerConfig {
 export class SessionManager {
   private config: SessionManagerConfig;
   private sessions: Map<string, Session<any>> = new Map();
+  private sessionTimestamps: Map<string, number> = new Map();
+  private maxCachedSessions: number;
 
-  constructor(config: SessionManagerConfig) {
+  constructor(config: SessionManagerConfig & { maxCachedSessions?: number }) {
     this.config = config;
+    this.maxCachedSessions = config.maxCachedSessions ?? 1000;
   }
 
   /**
@@ -1127,7 +1156,26 @@ export class SessionManager {
     }
 
     this.sessions.set(sessionId, session);
+    this.sessionTimestamps.set(sessionId, Date.now());
+
+    // Evict oldest sessions if cache exceeds limit
+    if (this.sessions.size > this.maxCachedSessions) {
+      this.evictOldest();
+    }
+
     return session;
+  }
+
+  /**
+   * Evict the oldest 20% of cached sessions when the cache exceeds maxCachedSessions.
+   */
+  private evictOldest(): void {
+    const entries = [...this.sessionTimestamps.entries()].sort((a, b) => a[1] - b[1]);
+    const toRemove = entries.slice(0, Math.floor(this.sessions.size * 0.2));
+    for (const [id] of toRemove) {
+      this.sessions.delete(id);
+      this.sessionTimestamps.delete(id);
+    }
   }
 
   /**
@@ -1141,6 +1189,7 @@ export class SessionManager {
     if (session) {
       await session.clear();
       this.sessions.delete(sessionId);
+      this.sessionTimestamps.delete(sessionId);
     }
   }
 
@@ -1152,5 +1201,6 @@ export class SessionManager {
    */
   clearCache(): void {
     this.sessions.clear();
+    this.sessionTimestamps.clear();
   }
 }

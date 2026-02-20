@@ -1,13 +1,13 @@
 /**
  * Image Generation Feature
  * 
- * Provides image generation capabilities using AI SDK v5's native `experimental_generateImage`.
+ * Provides image generation capabilities using AI SDK v6's `generateImage`.
  * Supports multiple providers (OpenAI DALL-E, Stability AI, etc.)
  * 
  * @module tools/image
  */
 
-import { experimental_generateImage as generateImage } from 'ai';
+import { generateImage } from 'ai';
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
 

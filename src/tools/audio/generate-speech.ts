@@ -1,7 +1,7 @@
 /**
  * Text-to-Speech (TTS) Feature
  * 
- * Provides speech generation capabilities using AI SDK v5's native `experimental_generateSpeech`.
+ * Provides speech generation capabilities using AI SDK v6's `experimental_generateSpeech`.
  * Converts text to natural-sounding speech.
  * 
  * @module tools/audio
