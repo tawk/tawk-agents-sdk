@@ -2,9 +2,8 @@
 node_modules/
 openai-agents-js/
 # Build outputs
-# dist/ - Including in git for npm git installs
+dist/
 *.tsbuildinfo
-
 # Environment variables
 .env
 .env.local
