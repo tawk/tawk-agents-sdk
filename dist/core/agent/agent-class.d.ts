@@ -257,6 +257,7 @@ export declare class Agent<TContext = any, TOutput = string> extends AgentHooks<
         maxTokens?: number;
         presencePenalty?: number;
         frequencyPenalty?: number;
+        providerOptions?: Record<string, Record<string, unknown>>;
     } | undefined;
     get _tokenizerFn(): TokenizerFn;
     get _onStepFinish(): ((step: StepResult) => void | Promise<void>) | undefined;

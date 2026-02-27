@@ -106,6 +106,7 @@ export interface AgentConfig<TContext = any, TOutput = string> {
         maxTokens?: number;
         presencePenalty?: number;
         frequencyPenalty?: number;
+        providerOptions?: Record<string, Record<string, unknown>>;
     };
     /** Custom tokenizer (default: 4 chars = 1 token) */
     tokenizerFn?: TokenizerFn;

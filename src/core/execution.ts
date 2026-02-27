@@ -334,9 +334,7 @@ export function processModelResponse<T extends ToolSet = ToolSet>(
             const toolInput = part.input ?? part.args ?? {};
 
             transformedContent.push({
-              type: 'tool-call',
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
+              ...part,
               input: typeof toolInput === 'object' ? toolInput : {},
             });
           } else {

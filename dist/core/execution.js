@@ -225,9 +225,7 @@ function processModelResponse(response) {
                         // AI SDK uses 'input', but 'args' is kept for backwards compatibility with older versions
                         const toolInput = part.input ?? part.args ?? {};
                         transformedContent.push({
-                            type: 'tool-call',
-                            toolCallId: part.toolCallId,
-                            toolName: part.toolName,
+                            ...part,
                             input: typeof toolInput === 'object' ? toolInput : {},
                         });
                     }

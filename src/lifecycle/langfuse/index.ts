@@ -71,7 +71,6 @@ export function initializeLangfuse(): Langfuse | null {
     });
 
     isEnabled = true;
-    console.log('✅ Langfuse tracing initialized:', baseUrl);
     return langfuseInstance;
   } catch (error) {
     console.error('❌ Failed to initialize Langfuse:', error);

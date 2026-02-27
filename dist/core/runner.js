@@ -329,8 +329,13 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                         maxTokens: state.currentAgent._modelSettings?.responseTokens,
                     },
                     input: {
-                        system: systemMessage.substring(0, 200),
-                        messages: state.messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.substring(0, 100) : '...' })),
+                        system: systemMessage,
+                        messages: state.messages.map(m => {
+                            if (typeof m.content === 'string') {
+                                return { role: m.role, content: m.content };
+                            }
+                            return { role: m.role, content: JSON.stringify(m.content) };
+                        }),
                         tools: Object.keys(tools || {})
                     },
                     metadata: {
@@ -351,13 +356,14 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
                     presencePenalty: state.currentAgent._modelSettings?.presencePenalty,
                     frequencyPenalty: state.currentAgent._modelSettings?.frequencyPenalty,
+                    providerOptions: state.currentAgent._modelSettings?.providerOptions,
                 });
                 // End generation with proper usage tracking
                 if (generation) {
                     const usage = modelResponse.usage || {};
                     generation.end({
                         output: {
-                            text: modelResponse.text.substring(0, 200),
+                            text: modelResponse.text,
                             toolCalls: modelResponse.toolCalls?.length || 0,
                             finishReason: modelResponse.finishReason
                         },
@@ -438,19 +444,8 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     // End agent span with accumulated token usage
                     if (state.currentAgentSpan) {
                         const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
-                        // Configurable truncation for Langfuse (default: 5000 chars, set to 0 for no truncation)
-                        const maxOutputLength = process.env.LANGFUSE_MAX_OUTPUT_LENGTH
-                            ? parseInt(process.env.LANGFUSE_MAX_OUTPUT_LENGTH)
-                            : 5000;
-                        const truncatedOutput = maxOutputLength > 0 && finalOutputString.length > maxOutputLength
-                            ? finalOutputString.substring(0, maxOutputLength) + '... (truncated)'
-                            : finalOutputString;
                         state.currentAgentSpan.end({
-                            output: truncatedOutput,
-                            metadata: {
-                                fullLength: finalOutputString.length,
-                                truncated: finalOutputString.length > maxOutputLength
-                            },
+                            output: finalOutputString,
                             usage: agentMetrics ? {
                                 input: agentMetrics.tokens.input,
                                 output: agentMetrics.tokens.output,

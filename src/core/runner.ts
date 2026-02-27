@@ -488,6 +488,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
           presencePenalty: state.currentAgent._modelSettings?.presencePenalty,
           frequencyPenalty: state.currentAgent._modelSettings?.frequencyPenalty,
+          providerOptions: state.currentAgent._modelSettings?.providerOptions,
         } as any);
 
         // End generation with proper usage tracking
