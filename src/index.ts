@@ -84,18 +84,6 @@ export {
 } from './core/transfers';
 export type { TransferResult } from './core/transfers';
 
-// Race agents (parallel execution pattern)
-export { raceAgents } from './core/race-agents';
-export type { RaceAgentsOptions } from './core/race-agents';
-
-// Coordination (parallel, judge, hierarchical patterns)
-export { runParallel, runWithJudge, runHierarchical } from './core/coordination';
-export type {
-  RaceResult,
-  ParallelAgentsOptions,
-  ParallelResult,
-} from './core/coordination';
-
 // Run state management
 export { RunState } from './core/runstate';
 export type {

@@ -22,9 +22,6 @@ export {
   TokenBudgetTracker
 } from './runner';
 
-export { raceAgents } from './race-agents';
-export type { RaceAgentsOptions } from './race-agents';
-
 export { RunState } from './runstate';
 export type {
   RunItem,
