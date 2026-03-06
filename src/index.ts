@@ -84,6 +84,21 @@ export {
 } from './core/transfers';
 export type { TransferResult } from './core/transfers';
 
+// MCP (Model Context Protocol)
+// ============================================
+
+export {
+  MCPServer,
+  MCPServerManager,
+} from './mcp/enhanced';
+
+export type {
+  MCPServerConfig,
+  MCPTool,
+  MCPResource,
+  MCPPrompt,
+} from './mcp/enhanced';
+
 // Run state management
 export { RunState } from './core/runstate';
 export type {

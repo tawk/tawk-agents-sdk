@@ -1,6 +1,6 @@
 /**
- * Enhanced Model Context Protocol (MCP) Support
- * 
+ * Model Context Protocol (MCP) Support
+ *
  * Provides native agent-level MCP integration with:
  * - Automatic tool fetching
  * - Lifecycle management
@@ -114,10 +114,10 @@ export interface MCPPrompt {
 }
 
 // ============================================
-// ENHANCED MCP SERVER
+// MCP SERVER
 // ============================================
 
-export class EnhancedMCPServer {
+export class MCPServer {
   private process?: ChildProcess;
   private tools: MCPTool[] = [];
   private resources: MCPResource[] = [];
@@ -598,11 +598,11 @@ export class EnhancedMCPServer {
 }
 
 // ============================================
-// ENHANCED MCP SERVER MANAGER
+// MCP SERVER MANAGER
 // ============================================
 
-export class EnhancedMCPServerManager {
-  private servers: Map<string, EnhancedMCPServer> = new Map();
+export class MCPServerManager {
+  private servers: Map<string, MCPServer> = new Map();
 
   /**
    * Register an MCP server
@@ -612,7 +612,7 @@ export class EnhancedMCPServerManager {
       throw new Error(`MCP server already registered: ${config.name}`);
     }
 
-    const server = new EnhancedMCPServer(config);
+    const server = new MCPServer(config);
 
     if (config.autoConnect !== false) {
       await server.connect();
@@ -624,7 +624,7 @@ export class EnhancedMCPServerManager {
   /**
    * Get a registered server
    */
-  getServer(name: string): EnhancedMCPServer | undefined {
+  getServer(name: string): MCPServer | undefined {
     return this.servers.get(name);
   }
 
@@ -699,36 +699,6 @@ export class EnhancedMCPServerManager {
    */
   getServerNames(): string[] {
     return Array.from(this.servers.keys());
-  }
-}
-
-// ============================================
-// GLOBAL MANAGER
-// ============================================
-
-let globalManager: EnhancedMCPServerManager | null = null;
-
-export function getGlobalMCPManager(): EnhancedMCPServerManager {
-  if (!globalManager) {
-    globalManager = new EnhancedMCPServerManager();
-  }
-  return globalManager;
-}
-
-export async function registerMCPServer(config: MCPServerConfig): Promise<void> {
-  const manager = getGlobalMCPManager();
-  await manager.registerServer(config);
-}
-
-export async function getMCPTools(): Promise<Record<string, CoreTool>> {
-  const manager = getGlobalMCPManager();
-  return await manager.getAllTools();
-}
-
-export async function shutdownMCPServers(): Promise<void> {
-  if (globalManager) {
-    await globalManager.shutdown();
-    globalManager = null;
   }
 }
 
