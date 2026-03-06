@@ -40,9 +40,6 @@ export type {
   RunState,
   RunContextWrapper,
   
-  // Session interface
-  Session,
-  
   // Guardrail interfaces
   Guardrail,
   GuardrailResult,

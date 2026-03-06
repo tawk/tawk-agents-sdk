@@ -10,7 +10,6 @@
  * - Agent Configuration
  * - Execution Options and Results
  * - Streaming Interfaces
- * - Session Management
  * - Guardrails
  * - Context and State
  * 
@@ -166,25 +165,20 @@ export interface AgentConfig<TContext = any, TOutput = string> {
  * @template TContext - Type of context object passed to tools
  * 
  * @property {TContext} [context] - Request-scoped context available to all tools
- * @property {Session} [session] - Session for maintaining conversation history
  * @property {boolean} [stream] - Whether to stream responses (use runStream() instead)
- * @property {Function} [sessionInputCallback] - Transform messages before agent execution
  * @property {number} [maxTurns] - Maximum conversation turns before stopping (default: 50)
- * 
+ *
  * @example
  * ```typescript
  * const options: RunOptions<MyContext> = {
  *   context: { userId: '123', database: db },
- *   session: new MemorySession('user-123'),
  *   maxTurns: 20
  * };
  * ```
  */
 export interface RunOptions<TContext = any> {
   context?: TContext;
-  session?: Session<TContext>;
   stream?: boolean;
-  sessionInputCallback?: (history: ModelMessage[], newInput: ModelMessage[]) => ModelMessage[];
   maxTurns?: number;
 }
 
@@ -389,40 +383,6 @@ export interface RunContextWrapper<TContext> {
   agent: any; // Agent<TContext, any> - circular dependency resolved at runtime
   messages: ModelMessage[];
   usage: Usage;
-}
-
-// ============================================
-// SESSION MANAGEMENT
-// ============================================
-
-/**
- * Session interface for maintaining conversation history across agent runs.
- * 
- * @template TContextType - Type of context stored in the session
- * 
- * @property {string} id - Unique identifier for this session
- * @property {Function} getHistory - Load conversation history from storage
- * @property {Function} addMessages - Add new messages to the session
- * @property {Function} clear - Clear session history
- * @property {Function} getMetadata - Get session metadata/context
- * @property {Function} updateMetadata - Update session metadata
- * 
- * @example
- * ```typescript
- * const session = new MemorySession('user-123');
- * await run(agent, 'Hello', { session });
- * 
- * const history = await session.getHistory();
- * console.log(history.length); // Includes all messages
- * ```
- */
-export interface Session<_TContextType = any> {
-  id: string;
-  getHistory(): Promise<ModelMessage[]>;
-  addMessages(messages: ModelMessage[]): Promise<void>;
-  clear(): Promise<void>;
-  getMetadata(): Promise<Record<string, any>>;
-  updateMetadata(metadata: Record<string, any>): Promise<void>;
 }
 
 // ============================================

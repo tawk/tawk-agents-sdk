@@ -156,19 +156,6 @@ export type {
 } from './core/agent';
 
 // ============================================
-// SESSION MANAGEMENT
-// ============================================
-
-export {
-  SessionManager,
-  MemorySession,
-} from './sessions';
-
-export type {
-  Session,
-} from './sessions';
-
-// ============================================
 // HELPERS & UTILITIES
 // ============================================
 

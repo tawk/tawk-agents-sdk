@@ -316,7 +316,6 @@ export interface Agent<TContext = any, TOutput = string> {
 
 export interface RunOptions<TContext = any> {
   context?: TContext;
-  session?: Session<TContext>;
   maxTurns?: number;
   
   // Tracing
@@ -341,15 +340,6 @@ export interface RunState {
   context: any;
   stepNumber: number;
   traceId?: string;
-}
-
-export interface Session<_TContext = any> {
-  id: string;
-  getHistory(): Promise<Message[]>;
-  addMessages(messages: Message[]): Promise<void>;
-  clear(): Promise<void>;
-  getMetadata(): Promise<Record<string, any>>;
-  updateMetadata(metadata: Record<string, any>): Promise<void>;
 }
 
 export interface StreamResult<TOutput = string> {

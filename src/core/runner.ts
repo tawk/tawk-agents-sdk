@@ -155,7 +155,6 @@ export class TokenBudgetTracker {
 
 export interface RunOptions<TContext = any> {
   context?: TContext;
-  session?: any; // Session for conversation history
   maxTurns?: number;
   stream?: boolean;
   signal?: AbortSignal;

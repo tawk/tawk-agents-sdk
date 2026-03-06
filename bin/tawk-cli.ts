@@ -11,12 +11,11 @@
 import 'dotenv/config';
 import pc from 'picocolors';
 import { randomUUID } from 'crypto';
-import { MemorySession } from '../src';
 import { Usage } from '../src/core/usage';
 import { resolveModel } from './cli/model-provider';
 import { createAgent, getPresetNames } from './cli/agents';
 import { startRepl } from './cli/repl';
-import type { CLIOptions, CLIState } from './cli/types';
+import { CLISession, type CLIOptions, type CLIState } from './cli/types';
 
 // ============================================
 // ARG PARSING
@@ -147,7 +146,7 @@ async function main(): Promise<void> {
   }
 
   // Create session
-  const session = new MemorySession(options.session);
+  const session = new CLISession(options.session);
 
   // Build CLI state
   const state: CLIState = {
