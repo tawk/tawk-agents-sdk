@@ -7,7 +7,6 @@
  * 
  * **Core Capabilities**:
  * - Stateful agent execution
- * - Interruption and resumption support
  * - Type-safe state transitions
  * - Message history management
  * - Agent context tracking
@@ -17,7 +16,6 @@
  * - `next_step_run_again`: Continue execution
  * - `next_step_handoff`: Transfer to another agent
  * - `next_step_final_output`: Execution complete
- * - `next_step_interruption`: Pause for human input
  * 
  * **Architecture**:
  * Provides a clean abstraction over agent execution state,
@@ -62,7 +60,6 @@ export const NextStepType = {
   RUN_AGAIN: 'next_step_run_again',
   HANDOFF: 'next_step_handoff',
   FINAL_OUTPUT: 'next_step_final_output',
-  INTERRUPTION: 'next_step_interruption',
 } as const;
 
 /**
@@ -72,8 +69,7 @@ export const NextStepType = {
 export type NextStep =
   | { type: typeof NextStepType.RUN_AGAIN }
   | { type: typeof NextStepType.HANDOFF; newAgent: Agent<any, any>; reason?: string; context?: string }
-  | { type: typeof NextStepType.FINAL_OUTPUT; output: string }
-  | { type: typeof NextStepType.INTERRUPTION; interruptions: any[] };
+  | { type: typeof NextStepType.FINAL_OUTPUT; output: string };
 
 /**
  * Individual step result with tool outcomes
@@ -143,7 +139,6 @@ export class AgentToolUseTracker {
  * - Current agent and execution context
  * - Message history and generated items
  * - Step tracking and metrics
- * - Interruption state for HITL patterns
  * - Tracing spans and metadata
  * 
  * @template TContext - Type of context object
@@ -170,9 +165,6 @@ export class RunState<TContext = any, TAgent extends Agent<TContext, any> = Agen
   // Handoff tracking
   public handoffChain: string[] = [];
   private handoffChainSet: Set<string> = new Set();
-
-  // Interruption state for HITL
-  public pendingInterruptions: any[] = [];
 
   // Tracing
   public trace?: any;
@@ -282,27 +274,6 @@ export class RunState<TContext = any, TAgent extends Agent<TContext, any> = Agen
   }
 
   /**
-   * Add an interruption (for HITL patterns)
-   */
-  addInterruption(interruption: any): void {
-    this.pendingInterruptions.push(interruption);
-  }
-
-  /**
-   * Check if there are pending interruptions
-   */
-  hasInterruptions(): boolean {
-    return this.pendingInterruptions.length > 0;
-  }
-
-  /**
-   * Clear interruptions after they've been handled
-   */
-  clearInterruptions(): void {
-    this.pendingInterruptions = [];
-  }
-
-  /**
    * Get total execution duration
    */
   getDuration(): number {
@@ -326,7 +297,6 @@ export class RunState<TContext = any, TAgent extends Agent<TContext, any> = Agen
       toolUseTracker: this.toolUseTracker.toJSON(),
       usage: this.usage.toJSON(),
       handoffChain: this.handoffChain,
-      pendingInterruptions: this.pendingInterruptions,
       stepNumber: this.stepNumber,
       duration: this.getDuration(),
     };

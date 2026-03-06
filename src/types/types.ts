@@ -1,7 +1,7 @@
 /**
  * Enhanced Types for Full Feature Support
  * 
- * Includes: Error types, Background results, Tracing, MCP, Human-in-the-loop
+ * Includes: Error types, Background results, Tracing, MCP
  */
 
 import { z } from 'zod';
@@ -76,17 +76,6 @@ export class HandoffError extends Error {
   }
 }
 
-export class ApprovalRequiredError extends Error {
-  constructor(
-    public toolName: string,
-    public args: any,
-    public approvalToken: string
-  ) {
-    super(`Approval required for tool: ${toolName}`);
-    this.name = 'ApprovalRequiredError';
-  }
-}
-
 // ============================================
 // TRACING TYPES (for Langfuse integration)
 // ============================================
@@ -131,48 +120,6 @@ export interface MCPToolCall {
   serverName: string;
   args: any;
   result?: any;
-}
-
-// ============================================
-// HUMAN-IN-THE-LOOP TYPES
-// ============================================
-
-export interface ApprovalConfig {
-  /**
-   * Tools that require approval before execution
-   */
-  requiredForTools?: string[];
-
-  /**
-   * Tools explicitly exempt from default-deny sensitive pattern matching.
-   * Use this to opt out specific tools that match sensitive keywords
-   * (e.g., "execute_query") but are known-safe.
-   */
-  exemptTools?: string[];
-
-  /**
-   * Function to request approval
-   */
-  requestApproval: (tool: string, args: any) => Promise<ApprovalResponse>;
-
-  /**
-   * Timeout for approval (ms)
-   */
-  timeout?: number;
-}
-
-export interface ApprovalResponse {
-  approved: boolean;
-  reason?: string;
-  modifiedArgs?: any; // Optionally modify the args
-}
-
-export interface PendingApproval {
-  toolName: string;
-  args: any;
-  approvalToken: string;
-  requestedAt: number;
-  status: 'pending' | 'approved' | 'rejected' | 'timeout';
 }
 
 // ============================================
@@ -254,10 +201,7 @@ export interface EnhancedAgentConfig<TContext = any, TOutput = string> {
   
   // MCP support
   mcpServers?: MCPServerConfig[];
-  
-  // Human-in-the-loop
-  approvalConfig?: ApprovalConfig;
-  
+
   // Tracing
   tracing?: {
     enabled: boolean;
@@ -279,10 +223,7 @@ export interface ToolDefinition {
   parameters?: z.ZodSchema<any>; // For backward compatibility
   inputSchema?: z.ZodSchema<any>; // AI SDK v5 standard
   execute: (args: any, context?: any) => Promise<any> | any | BackgroundResult<any>;
-  
-  // Optional: require approval
-  requiresApproval?: boolean;
-  
+
   // Optional: MCP tool info
   mcpServer?: string;
   
@@ -351,8 +292,6 @@ export interface ToolCall {
   args: any;
   result?: any;
   id?: string;
-  requiresApproval?: boolean;
-  approvalStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 export interface Agent<TContext = any, TOutput = string> {
@@ -372,7 +311,6 @@ export interface Agent<TContext = any, TOutput = string> {
   readonly _onStepFinish?: (step: StepResult) => void | Promise<void>;
   readonly _shouldFinish?: (context: TContext, toolResults: any[]) => boolean;
   readonly _mcpServers?: MCPServerConfig[];
-  readonly _approvalConfig?: ApprovalConfig;
   readonly _tracing?: EnhancedAgentConfig<TContext, TOutput>['tracing'];
 }
 
@@ -384,10 +322,7 @@ export interface RunOptions<TContext = any> {
   // Tracing
   tracing?: TraceOptions;
   onTrace?: TraceCallback;
-  
-  // Human-in-the-loop
-  approvals?: Map<string, ApprovalResponse>; // Pre-approved actions
-  
+
   // Metadata
   metadata?: Record<string, any>;
 }
@@ -398,9 +333,6 @@ export interface RunResult<TOutput = string> {
   steps: StepResult[];
   state?: RunState;
   metadata: RunMetadata;
-  
-  // Pending approvals (if any)
-  pendingApprovals?: PendingApproval[];
 }
 
 export interface RunState {
@@ -408,7 +340,6 @@ export interface RunState {
   messages: Message[];
   context: any;
   stepNumber: number;
-  pendingApprovals?: PendingApproval[];
   traceId?: string;
 }
 
@@ -428,7 +359,7 @@ export interface StreamResult<TOutput = string> {
 }
 
 export interface StreamEvent {
-  type: 'text-delta' | 'tool-call' | 'tool-result' | 'step-finish' | 'finish' | 'error' | 'handoff' | 'approval-required' | 'trace';
+  type: 'text-delta' | 'tool-call' | 'tool-result' | 'step-finish' | 'finish' | 'error' | 'handoff' | 'trace';
   textDelta?: string;
   toolCall?: ToolCall;
   toolResult?: any;
@@ -439,6 +370,5 @@ export interface StreamEvent {
     toAgent: string;
     reason?: string;
   };
-  approval?: PendingApproval;
   trace?: TraceEvent;
 }

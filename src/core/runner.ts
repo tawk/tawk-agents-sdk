@@ -9,7 +9,6 @@
  * - Agents drive their own execution lifecycle
  * - Parallel tool execution for optimal performance
  * - Autonomous decision-making (agent-controlled, not SDK-controlled)
- * - State management for interruption and resumption
  * - Seamless multi-agent coordination and transfers
  * - End-to-end observability with Langfuse tracing
  * 
@@ -215,8 +214,7 @@ export interface StreamResult<TOutput = string> {
  * Key differences from old implementation:
  * 1. Agents decide when to continue/finish (not SDK)
  * 2. Tools execute in parallel (not sequential)
- * 3. Proper state management for interruption/resumption
- * 4. Agent-driven handoffs with context
+ * 3. Agent-driven handoffs with context
  * 
  * @template TContext - Type of context object
  * @template TOutput - Type of output
@@ -807,27 +805,6 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
 
           // Continue loop with new agent (now with isolated context)
           continue;
-        } else if (nextStep.type === NextStepType.INTERRUPTION) {
-          // Agent needs human approval
-          state.pendingInterruptions = nextStep.interruptions;
-
-          // Return with interruption state
-          return {
-            finalOutput: null as any,
-            messages: state.messages,
-            steps: state.steps,
-            state,
-            metadata: {
-              totalTokens: state.usage.totalTokens,
-              promptTokens: state.usage.inputTokens,
-              completionTokens: state.usage.outputTokens,
-              finishReason: 'interrupted',
-              totalToolCalls: state.steps.reduce((sum, s) => sum + s.toolCalls.length, 0),
-              handoffChain: state.handoffChain,
-              agentMetrics: Array.from(state.agentMetrics.values()),
-              duration: state.getDuration(),
-            },
-          };
         } else if (nextStep.type === NextStepType.RUN_AGAIN) {
           // Agent decided to continue
           continue;

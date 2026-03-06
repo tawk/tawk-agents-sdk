@@ -107,13 +107,6 @@ export class RunResult<TContext = any, TAgent extends Agent<TContext, any> = Age
   }
 
   /**
-   * Interruptions that occurred (tool approvals, etc.)
-   */
-  get interruptions(): any[] {
-    return (this.state as any).interruptions || [];
-  }
-
-  /**
    * Final output (already available in base result)
    */
   get finalOutput(): any {

@@ -49,8 +49,6 @@ export interface ToolExecutionResult {
   result: unknown;
   error?: Error;
   duration: number;
-  needsApproval?: boolean;
-  approved?: boolean;
 }
 
 interface ToolCallInput {
@@ -89,12 +87,12 @@ function extractTargetAgentName(toolName: string): string {
 
 
 /**
- * Checks if a tool requires approval before execution
+ * Checks if a tool is disabled for the current execution context
  * @param tool Tool to check
  * @param contextWrapper Execution context
- * @returns True if the tool needs approval
+ * @returns True if the tool is disabled
  */
-async function checkToolNeedsApproval<TContext>(
+async function isToolDisabled<TContext>(
   tool: CoreTool,
   contextWrapper: RunContextWrapper<TContext>
 ): Promise<boolean> {
@@ -211,17 +209,16 @@ async function executeSingleTool<TContext>(
     };
   }
 
-  const needsApproval = await checkToolNeedsApproval(tool, contextWrapper);
+  const disabled = await isToolDisabled(tool, contextWrapper);
 
-  if (needsApproval) {
+  if (disabled) {
     return {
       toolName,
       toolCallId,
       args,
       result: null,
+      error: new Error(`Tool ${toolName} is not available in the current context`),
       duration: Date.now() - startTime,
-      needsApproval: true,
-      approved: false,
     };
   }
 
@@ -409,33 +406,6 @@ export async function determineNextStep<TContext = unknown>(
   toolResults: ToolExecutionResult[],
   context: TContext
 ): Promise<NextStep> {
-  let needsApproval = false;
-  for (const toolResult of toolResults) {
-    if (toolResult.needsApproval && !toolResult.approved) {
-      needsApproval = true;
-      break;
-    }
-  }
-
-  if (needsApproval) {
-    const interruptions: Array<{ toolName: string; args: unknown; type: string }> = [];
-
-    for (const toolResult of toolResults) {
-      if (toolResult.needsApproval && !toolResult.approved) {
-        interruptions.push({
-          toolName: toolResult.toolName,
-          args: toolResult.args,
-          type: 'tool_approval',
-        });
-      }
-    }
-
-    return {
-      type: NextStepType.INTERRUPTION,
-      interruptions,
-    };
-  }
-
   if (processed.handoffRequests.length > 0) {
     const handoff = processed.handoffRequests[0];
     const targetAgentName = handoff.agentName.toLowerCase().replace(/\s+/g, '_');
