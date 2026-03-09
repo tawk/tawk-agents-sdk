@@ -8,7 +8,7 @@
  * - Context injection
  */
 
-import { Agent, run, setDefaultModel, tool } from '../../src';
+import { Agent, run, tool } from '../../src';
 import { generateText } from 'ai';
 import { z } from 'zod';
 
@@ -21,7 +21,6 @@ describe('Basic Agent Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    setDefaultModel(mockModel);
   });
 
   describe('Agent Creation', () => {
@@ -29,6 +28,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Test Agent',
         instructions: 'You are a helpful assistant',
+        model: mockModel,
       });
 
       expect(agent).toBeDefined();
@@ -56,6 +56,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Tool Agent',
         instructions: 'Use tools',
+        model: mockModel,
         tools: { testTool },
       });
 
@@ -79,6 +80,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Simple Agent',
         instructions: 'You are helpful',
+        model: mockModel,
       });
 
       const result = await run(agent, 'Hello!');
@@ -101,6 +103,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Chat Agent',
         instructions: 'You are helpful',
+        model: mockModel,
       });
 
       const result1 = await run(agent, 'First message');
@@ -150,6 +153,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Weather Agent',
         instructions: 'Help with weather',
+        model: mockModel,
         tools: { weatherTool },
       });
 
@@ -198,6 +202,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Context Agent',
         instructions: 'Use context',
+        model: mockModel,
         tools: { contextTool },
       });
 
@@ -225,6 +230,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Token Agent',
         instructions: 'Track tokens',
+        model: mockModel,
       });
 
       const result = await run(agent, 'Count my tokens');
@@ -242,6 +248,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Error Agent',
         instructions: 'Handle errors',
+        model: mockModel,
       });
 
       await expect(run(agent, 'This will fail')).rejects.toThrow('API Error');
@@ -282,6 +289,7 @@ describe('Basic Agent Tests', () => {
       const agent = new Agent({
         name: 'Failing Agent',
         instructions: 'Use failing tool',
+        model: mockModel,
         tools: { failingTool },
       });
 

@@ -1,5 +1,5 @@
 import { createTransferTools, detectTransfer, createTransferContext } from '@tawk-agents-sdk/core';
-import { Agent, setDefaultModel } from '@tawk-agents-sdk/core';
+import { Agent } from '@tawk-agents-sdk/core';
 
 const mockModel = {
   specificationVersion: 'v1',
@@ -8,19 +8,17 @@ const mockModel = {
   defaultObjectGenerationMode: 'json' as const,
   doGenerate: jest.fn(),
   doStream: jest.fn(),
-};
+} as any;
 
 describe('Transfer System', () => {
-  beforeEach(() => {
-    setDefaultModel(mockModel as any);
-  });
 
   describe('createTransferTools', () => {
     it('should create transfer tools for subagents', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
       const sub = new Agent({
         name: 'billing-agent',
         instructions: 'billing',
+        model: mockModel,
         transferDescription: 'Handles billing questions',
       });
       const tools = createTransferTools(parent as any, [sub as any]);
@@ -29,14 +27,14 @@ describe('Transfer System', () => {
     });
 
     it('should return empty object for no subagents', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
       const tools = createTransferTools(parent as any, []);
       expect(Object.keys(tools)).toHaveLength(0);
     });
 
     it('should create executable transfer tools that return transfer markers', async () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
-      const sub = new Agent({ name: 'support', instructions: 'support' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
+      const sub = new Agent({ name: 'support', instructions: 'support', model: mockModel });
       const tools = createTransferTools(parent as any, [sub as any]);
       const result = await tools['transfer_to_support'].execute!(
         { reason: 'needs help', query: 'How do I reset?' },
@@ -49,8 +47,8 @@ describe('Transfer System', () => {
     });
 
     it('should set query to null when not provided', async () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
-      const sub = new Agent({ name: 'support', instructions: 'support' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
+      const sub = new Agent({ name: 'support', instructions: 'support', model: mockModel });
       const tools = createTransferTools(parent as any, [sub as any]);
       const result = await tools['transfer_to_support'].execute!(
         { reason: 'needs help' },
@@ -60,15 +58,15 @@ describe('Transfer System', () => {
     });
 
     it('should use default description when no transferDescription', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
-      const sub = new Agent({ name: 'support', instructions: 'support' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
+      const sub = new Agent({ name: 'support', instructions: 'support', model: mockModel });
       const tools = createTransferTools(parent as any, [sub as any]);
       expect(tools['transfer_to_support'].description).toContain('Transfer to support');
     });
 
     it('should normalize agent names with spaces', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
-      const sub = new Agent({ name: 'billing support', instructions: 'billing' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
+      const sub = new Agent({ name: 'billing support', instructions: 'billing', model: mockModel });
       const tools = createTransferTools(parent as any, [sub as any]);
       expect(tools).toHaveProperty('transfer_to_billing_support');
     });
@@ -79,11 +77,13 @@ describe('Transfer System', () => {
       const sub = new Agent({
         name: 'billing-agent',
         instructions: 'billing',
+        model: mockModel,
         transferDescription: 'Handles billing questions',
       });
       const parent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub],
       });
 
@@ -103,10 +103,11 @@ describe('Transfer System', () => {
     });
 
     it('should return null for non-transfer results', () => {
-      const sub = new Agent({ name: 'billing-agent', instructions: 'billing' });
+      const sub = new Agent({ name: 'billing-agent', instructions: 'billing', model: mockModel });
       const parent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub],
       });
 
@@ -118,13 +119,13 @@ describe('Transfer System', () => {
     });
 
     it('should return null for empty tool results', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
       const result = detectTransfer([], parent as any);
       expect(result).toBeNull();
     });
 
     it('should return null when target agent is not found in subagents', () => {
-      const parent = new Agent({ name: 'parent', instructions: 'parent' });
+      const parent = new Agent({ name: 'parent', instructions: 'parent', model: mockModel });
       const result = detectTransfer(
         [
           {

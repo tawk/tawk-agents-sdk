@@ -80,15 +80,6 @@ describe('RunState', () => {
     expect(state.handoffChain).toEqual(['test-agent', 'billing-agent']);
   });
 
-  it('should manage interruptions', () => {
-    expect(state.hasInterruptions()).toBe(false);
-    state.addInterruption({ type: 'approval_needed', toolName: 'delete' });
-    expect(state.hasInterruptions()).toBe(true);
-    expect(state.pendingInterruptions).toHaveLength(1);
-    state.clearInterruptions();
-    expect(state.hasInterruptions()).toBe(false);
-  });
-
   it('should update agent metrics', () => {
     state.updateAgentMetrics('test-agent', { input: 100, output: 50, total: 150 }, 2);
     const metric = state.agentMetrics.get('test-agent');

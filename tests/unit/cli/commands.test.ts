@@ -1,7 +1,7 @@
 import { handleCommand } from '../../../bin/cli/commands';
-import { Agent, MemorySession, setDefaultModel } from '../../../src';
+import { Agent } from '../../../src';
 import { Usage } from '../../../src/core/usage';
-import type { CLIState } from '../../../bin/cli/types';
+import { CLISession, type CLIState } from '../../../bin/cli/types';
 import { ALL_TOOLS } from '../../../bin/cli/tools';
 
 const mockModel = {
@@ -22,7 +22,7 @@ function createState(overrides: Partial<CLIState> = {}): CLIState {
       tools: ALL_TOOLS,
     }),
     agentName: 'default',
-    session: new MemorySession('test-session'),
+    session: new CLISession('test-session'),
     cumulativeUsage: new Usage(),
     totalToolCalls: 0,
     totalDuration: 0,
@@ -37,7 +37,6 @@ describe('CLI commands', () => {
   let setPrompt: jest.Mock;
 
   beforeEach(() => {
-    setDefaultModel(mockModel);
     setPrompt = jest.fn();
   });
 

@@ -1,6 +1,5 @@
-import { Agent, setDefaultModel } from '@tawk-agents-sdk/core';
+import { Agent } from '@tawk-agents-sdk/core';
 
-// Mock a minimal model
 const mockModel = {
   specificationVersion: 'v1',
   provider: 'test',
@@ -8,27 +7,15 @@ const mockModel = {
   defaultObjectGenerationMode: 'json' as const,
   doGenerate: jest.fn(),
   doStream: jest.fn(),
-};
+} as any;
 
 describe('Agent', () => {
-  beforeEach(() => {
-    setDefaultModel(mockModel as any);
-  });
-
   describe('constructor', () => {
     it('should create an agent with required config', () => {
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'You are a test agent',
-      });
-      expect(agent.name).toBe('test-agent');
-    });
-
-    it('should accept a model override', () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: 'test',
-        model: mockModel as any,
+        model: mockModel,
       });
       expect(agent.name).toBe('test-agent');
     });
@@ -37,6 +24,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
+        model: mockModel,
         tools: {
           myTool: {
             description: 'A test tool',
@@ -49,31 +37,23 @@ describe('Agent', () => {
     });
 
     it('should support subagents configuration', () => {
-      const sub = new Agent({ name: 'sub-agent', instructions: 'sub' });
+      const sub = new Agent({ name: 'sub-agent', instructions: 'sub', model: mockModel });
       const agent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub],
       });
       expect(agent.subagents).toHaveLength(1);
       expect(agent.subagents[0].name).toBe('sub-agent');
     });
 
-    it('should support legacy handoffs alias', () => {
-      const sub = new Agent({ name: 'sub-agent', instructions: 'sub' });
-      const agent = new Agent({
-        name: 'parent',
-        instructions: 'parent',
-        handoffs: [sub],
-      });
-      expect(agent.subagents).toHaveLength(1);
-    });
-
     it('should create transfer tools for subagents', () => {
-      const sub = new Agent({ name: 'billing', instructions: 'billing agent' });
+      const sub = new Agent({ name: 'billing', instructions: 'billing agent', model: mockModel });
       const agent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub],
       });
       expect(agent._tools).toHaveProperty('transfer_to_billing');
@@ -83,11 +63,13 @@ describe('Agent', () => {
       const sub = new Agent({
         name: 'billing',
         instructions: 'billing agent',
+        model: mockModel,
         transferDescription: 'Handles billing questions',
       });
       const agent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub],
       });
       expect(agent._tools['transfer_to_billing'].description).toContain('billing');
@@ -99,6 +81,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'test',
         instructions: 'static instructions',
+        model: mockModel,
       });
       const ctx = {
         context: {},
@@ -114,6 +97,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'test',
         instructions: async () => 'dynamic instructions',
+        model: mockModel,
       });
       const ctx = {
         context: {},
@@ -129,6 +113,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'test',
         instructions: 'cached instructions',
+        model: mockModel,
       });
       const ctx = {
         context: {},
@@ -148,6 +133,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'original',
         instructions: 'original instructions',
+        model: mockModel,
       });
       const cloned = agent.clone({ name: 'cloned' });
       expect(cloned.name).toBe('cloned');
@@ -157,6 +143,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'original',
         instructions: 'original instructions',
+        model: mockModel,
       });
       const cloned = agent.clone({ name: 'cloned' });
       // The cloned agent should still work with same model
@@ -169,6 +156,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'researcher',
         instructions: 'You research topics.',
+        model: mockModel,
       });
       const tool = agent.asTool({ toolDescription: 'Research a topic' });
       expect(tool.description).toBe('Research a topic');
@@ -179,6 +167,7 @@ describe('Agent', () => {
       const agent = new Agent({
         name: 'researcher',
         instructions: 'You research topics.',
+        model: mockModel,
       });
       const tool = agent.asTool();
       expect(tool.description).toBe('Delegate to researcher');
@@ -187,7 +176,7 @@ describe('Agent', () => {
 
   describe('dispose', () => {
     it('should remove all event listeners', () => {
-      const agent = new Agent({ name: 'test', instructions: 'test' });
+      const agent = new Agent({ name: 'test', instructions: 'test', model: mockModel });
       const handler = jest.fn();
       agent.onStart(handler);
       expect(agent.listenerCount('agent_start')).toBe(1);
@@ -198,11 +187,12 @@ describe('Agent', () => {
 
   describe('subagents setter', () => {
     it('should update subagents and recreate transfer tools', () => {
-      const sub1 = new Agent({ name: 'billing', instructions: 'billing' });
-      const sub2 = new Agent({ name: 'support', instructions: 'support' });
+      const sub1 = new Agent({ name: 'billing', instructions: 'billing', model: mockModel });
+      const sub2 = new Agent({ name: 'support', instructions: 'support', model: mockModel });
       const agent = new Agent({
         name: 'parent',
         instructions: 'parent',
+        model: mockModel,
         subagents: [sub1],
       });
       expect(agent._tools).toHaveProperty('transfer_to_billing');

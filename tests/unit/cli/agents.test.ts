@@ -1,5 +1,5 @@
 import { createAgent, getPresetNames, getPresetInfo } from '../../../bin/cli/agents';
-import { Agent, setDefaultModel } from '../../../src';
+import { Agent } from '../../../src';
 
 const mockModel = {
   specificationVersion: 'v1',
@@ -11,9 +11,6 @@ const mockModel = {
 } as any;
 
 describe('CLI agents', () => {
-  beforeEach(() => {
-    setDefaultModel(mockModel);
-  });
 
   describe('getPresetNames', () => {
     it('should return 4 preset names', () => {
