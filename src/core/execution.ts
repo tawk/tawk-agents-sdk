@@ -14,6 +14,7 @@ import type {
 import type { RunState, NextStep, StepResult } from './runstate';
 import { SingleStepResult, NextStepType } from './runstate';
 import { createContextualSpan } from '../tracing/context';
+import { encodeTOON } from '../helpers/toon';
 
 const TRANSFER_PREFIXES = ['transfer_to_', 'handoff_to_'] as const;
 const TOOL_EXECUTION_BATCH_SIZE = 3;
@@ -519,10 +520,19 @@ export async function executeSingleStep<TContext = unknown>(
       output: { type: 'error-text'; value: string } | { type: 'json'; value: unknown };
     }> = [];
 
+    const agentUseTOON = agent._useTOON;
+
     for (const toolResult of toolResults) {
       let output: { type: 'error-text'; value: string } | { type: 'json'; value: unknown };
+      // Per-tool useTOON overrides agent-level setting
+      const toolDef = agent._tools[toolResult.toolName];
+      const shouldUseTOON = toolDef?.useTOON ?? agentUseTOON;
+
       if (toolResult.error) {
         output = { type: 'error-text', value: toolResult.error.message };
+      } else if (shouldUseTOON && toolResult.result != null && typeof toolResult.result === 'object') {
+        // TOON-encode object results for ~40% token reduction
+        output = { type: 'json', value: encodeTOON(toolResult.result) };
       } else {
         output = { type: 'json', value: toolResult.result ?? null };
       }
