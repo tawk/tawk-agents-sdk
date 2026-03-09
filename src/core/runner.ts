@@ -251,10 +251,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
       maxTurns
     );
 
-    // Auto-initialize Langfuse tracing
-    isLangfuseEnabled();
-
-    // Get or create trace
+    // Create Langfuse trace if tracing was initialized by the consumer
     let trace = getCurrentTrace();
     if (!trace && isLangfuseEnabled()) {
       const initialInput = typeof input === 'string'
@@ -285,7 +282,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
       agent.emit('agent_start', contextWrapper, agent);
 
       try {
-        return await this.executeAgentLoop(agent, state, contextWrapper, maxTurns);
+        return await this.executeAgentLoop(agent, state, contextWrapper, maxTurns, { signal: mergedOptions.signal });
       } catch (error) {
         // Emit agent_end event on error so lifecycle listeners get matched start/end
         try {
@@ -319,8 +316,10 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
     agent: Agent<TContext, TOutput>,
     state: RunState<TContext, Agent<TContext, TOutput>>,
     contextWrapper: RunContextWrapper<TContext>,
-    maxTurns: number
+    maxTurns: number,
+    extras: { signal?: AbortSignal } = {}
   ): Promise<RunResult<TOutput>> {
+    const { signal } = extras;
     const MAX_GUARDRAIL_RETRIES = 3;
     let guardrailRetryCount = 0;
 
@@ -554,6 +553,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           stopWhen: state.currentAgent._stopWhen as StopCondition<ToolSet> | StopCondition<ToolSet>[] | undefined,
           activeTools: state.currentAgent._activeTools as any,
           prepareStep: state.currentAgent._prepareStep as PrepareStepFunction<ToolSet> | undefined,
+          ...(signal ? { abortSignal: signal } : {}),
         } as any);
 
         // End generation with proper usage tracking
@@ -849,8 +849,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
       maxTurns
     );
 
-    isLangfuseEnabled();
-
+    // Create Langfuse trace if tracing was initialized by the consumer
     let trace = getCurrentTrace();
     if (!trace && isLangfuseEnabled()) {
       const initialInput = typeof input === 'string'
@@ -919,6 +918,7 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           stopWhen: state.currentAgent._stopWhen as StopCondition<ToolSet> | StopCondition<ToolSet>[] | undefined,
           activeTools: state.currentAgent._activeTools as any,
           prepareStep: state.currentAgent._prepareStep as PrepareStepFunction<ToolSet> | undefined,
+          ...(mergedOptions.signal ? { abortSignal: mergedOptions.signal } : {}),
         } as any);
 
         // Stream text deltas and tool events to the caller

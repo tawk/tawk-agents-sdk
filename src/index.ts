@@ -135,6 +135,8 @@ export {
   shutdownLangfuse,
 } from './lifecycle/langfuse';
 
+export type { LangfuseConfig } from './lifecycle/langfuse';
+
 // ============================================
 // GUARDRAILS
 // ============================================

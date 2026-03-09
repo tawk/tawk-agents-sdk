@@ -38,53 +38,58 @@ import type { ModelMessage } from 'ai';
 
 let langfuseInstance: Langfuse | null = null;
 let isEnabled = false;
-let initAttempted = false;
 
 /**
- * Initialize Langfuse with credentials from environment variables.
- * Thread-safe: uses a flag to ensure initialization runs at most once.
+ * Configuration for initializing Langfuse tracing.
+ *
+ * @property {string} publicKey - Langfuse public key
+ * @property {string} secretKey - Langfuse secret key
+ * @property {string} [baseUrl] - Langfuse base URL (default: https://cloud.langfuse.com)
+ * @property {number} [flushAt] - Number of events to batch before flushing (default: 15)
+ * @property {number} [flushInterval] - Flush interval in ms (default: 1000)
+ * @property {number} [requestTimeout] - Request timeout in ms (default: 10000)
  */
-export function initializeLangfuse(): Langfuse | null {
-  // Check if already initialized or already attempted
+export interface LangfuseConfig {
+  publicKey: string;
+  secretKey: string;
+  baseUrl?: string;
+  flushAt?: number;
+  flushInterval?: number;
+  requestTimeout?: number;
+}
+
+/**
+ * Initialize Langfuse with explicit configuration.
+ * The consumer must call this before tracing is active — no auto-init from env vars.
+ *
+ * @example
+ * ```typescript
+ * import { initLangfuse } from 'tawk-agents-sdk';
+ *
+ * initLangfuse({
+ *   publicKey: config.langfusePublicKey,
+ *   secretKey: config.langfuseSecretKey,
+ * });
+ * ```
+ */
+export function initializeLangfuse(config: LangfuseConfig): Langfuse | null {
   if (langfuseInstance) {
     return langfuseInstance;
   }
-  if (initAttempted) {
-    return null;
-  }
-  initAttempted = true;
-
-  // Check for required environment variables
-  const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
-  const secretKey = process.env.LANGFUSE_SECRET_KEY;
-  const baseUrl = process.env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com';
-
-  if (!publicKey || !secretKey) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Langfuse not initialized: Missing LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY');
-    }
-    return null;
-  }
 
   try {
-    const flushAt = parseInt(process.env.LANGFUSE_FLUSH_AT || '15', 10);
-
     langfuseInstance = new Langfuse({
-      publicKey,
-      secretKey,
-      baseUrl,
-      flushAt, // Configurable via env; defaults to 15 for production batching
-      flushInterval: 1000,
-      requestTimeout: 10000,
+      publicKey: config.publicKey,
+      secretKey: config.secretKey,
+      baseUrl: config.baseUrl ?? 'https://cloud.langfuse.com',
+      flushAt: config.flushAt ?? 15,
+      flushInterval: config.flushInterval ?? 1000,
+      requestTimeout: config.requestTimeout ?? 10000,
     });
 
     isEnabled = true;
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Langfuse tracing initialized:', baseUrl);
-    }
     return langfuseInstance;
   } catch (error) {
-    // Sanitize error — don't log credentials
     const safeMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to initialize Langfuse:', safeMessage);
     return null;
@@ -92,23 +97,18 @@ export function initializeLangfuse(): Langfuse | null {
 }
 
 /**
- * Get the current Langfuse instance (initializes if needed)
+ * Get the current Langfuse instance.
+ * Returns null if initializeLangfuse() has not been called.
  */
 export function getLangfuse(): Langfuse | null {
-  if (!langfuseInstance && !initAttempted) {
-    return initializeLangfuse();
-  }
   return langfuseInstance;
 }
 
 /**
- * Check if Langfuse tracing is enabled
- * Auto-initializes Langfuse if credentials are available
+ * Check if Langfuse tracing is enabled.
+ * Returns true only after initializeLangfuse() has been called successfully.
  */
 export function isLangfuseEnabled(): boolean {
-  if (!langfuseInstance && !initAttempted) {
-    initializeLangfuse();
-  }
   return isEnabled && langfuseInstance !== null;
 }
 
@@ -334,7 +334,6 @@ export async function shutdownLangfuse(): Promise<void> {
   } finally {
     langfuseInstance = null;
     isEnabled = false;
-    initAttempted = false;
   }
 }
 
@@ -358,14 +357,4 @@ export function extractModelName(model: any): string {
   return 'unknown';
 }
 
-// Graceful shutdown handlers
-if (typeof process !== 'undefined') {
-  const gracefulShutdown = async () => {
-    await shutdownLangfuse();
-  };
-
-  process.on('SIGTERM', gracefulShutdown);
-  process.on('SIGINT', gracefulShutdown);
-  process.on('beforeExit', gracefulShutdown);
-}
 
