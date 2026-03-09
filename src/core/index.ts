@@ -4,7 +4,7 @@
  * @module core
  */
 
-export { Agent, run, runStream, setDefaultModel, tool } from './agent';
+export { Agent, run, runStream, tool } from './agent';
 export { defaultTokenizerFn } from './agent/agent-class';
 export type {
   AgentConfig,

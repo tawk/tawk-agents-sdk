@@ -181,7 +181,7 @@ export interface EnhancedAgentConfig<TContext = any, TOutput = string> {
   instructions: string | ((context: RunContextWrapper<TContext>) => string | Promise<string>);
   model?: any;
   tools?: Record<string, ToolDefinition>;
-  handoffs?: Agent<TContext, any>[];
+  subagents?: Agent<TContext, any>[];
   guardrails?: Guardrail<TContext>[];
   
   // Structured output
@@ -304,7 +304,7 @@ export interface Agent<TContext = any, TOutput = string> {
   readonly _model: any;
   readonly _tools: Record<string, ToolDefinition>;
   readonly _guardrails: Guardrail<TContext>[];
-  readonly _handoffs: Agent<TContext, any>[];
+  readonly _subagents: Agent<TContext, any>[];
   readonly _outputSchema?: z.ZodSchema<TOutput>;
   readonly _maxSteps: number;
   readonly _modelSettings?: ModelSettings;

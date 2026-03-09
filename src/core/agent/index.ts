@@ -39,7 +39,7 @@ export type {
   // State interfaces
   RunState,
   RunContextWrapper,
-  
+
   // Guardrail interfaces
   Guardrail,
   GuardrailResult,
@@ -51,8 +51,6 @@ export type {
 
 export {
   Agent,
-  setDefaultModel,
-  getDefaultModel,
 } from './agent-class';
 
 // ============================================

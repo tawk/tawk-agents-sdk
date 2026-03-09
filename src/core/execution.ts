@@ -411,7 +411,7 @@ export async function determineNextStep<TContext = unknown>(
     const targetAgentName = handoff.agentName.toLowerCase().replace(/\s+/g, '_');
 
     let targetAgent: Agent<TContext, unknown> | undefined;
-    for (const subagent of agent.handoffs) {
+    for (const subagent of agent.subagents) {
       if (subagent.name.toLowerCase().replace(/\s+/g, '_') === targetAgentName) {
         targetAgent = subagent;
         break;

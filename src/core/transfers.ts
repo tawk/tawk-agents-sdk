@@ -51,8 +51,8 @@ export function createTransferTools(
   for (const subagent of subagents) {
     const toolName = `transfer_to_${subagent.name.toLowerCase().replace(/\s+/g, '_')}`;
     
-    const description = subagent.transferDescription || subagent.handoffDescription 
-      ? `Transfer to ${subagent.name}: ${subagent.transferDescription || subagent.handoffDescription}`
+    const description = subagent.transferDescription
+      ? `Transfer to ${subagent.name}: ${subagent.transferDescription}`
       : `Transfer to ${subagent.name} agent to handle the request`;
     
     tools[toolName] = {
@@ -91,7 +91,7 @@ export function detectTransfer(
   if (toolResults.length === 0) return null;
   
   // Create agent lookup map for O(1) resolution
-  const subagents = currentAgent.subagents || currentAgent.handoffs || [];
+  const subagents = currentAgent.subagents || [];
   const subagentMap = new Map<string, Agent<any, any>>();
   for (const agent of subagents) {
     subagentMap.set(agent.name, agent);

@@ -105,12 +105,14 @@ export function tool(config: {
   inputSchema: FlexibleInputSchema;
   execute: (args: any, context?: any) => Promise<any> | any;
   enabled?: boolean | ((context: any) => boolean | Promise<boolean>);
+  useTOON?: boolean;
 }): CoreTool {
   return {
     description: config.description,
     inputSchema: config.inputSchema,
     execute: config.execute,
     enabled: config.enabled,
+    useTOON: config.useTOON,
   };
 }
 

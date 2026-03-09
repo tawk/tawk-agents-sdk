@@ -46,17 +46,14 @@
 export {
   // Agent class
   Agent,
-  
+
   // Run functions
   run,
   runStream,
-  
+
   // Tool function
   tool,
-  
-  // Utilities
-  setDefaultModel,
-  
+
   // Types
   type AgentConfig,
   type CoreTool,
@@ -64,6 +61,10 @@ export {
   type RunOptions,
   type RunResult,
   type StreamResult,
+  type AgentOutputConfig,
+  type ModelSettings,
+  type ExecutionConfig,
+  type AgentHooksConfig,
 } from './core/agent';
 
 // Runner with streaming
@@ -283,6 +284,19 @@ export type {
 
 // Default tools convenience function
 export { createDefaultTools } from './tools/defaults';
+
+// ============================================
+// TOON ENCODING (Token-Optimized Object Notation)
+// ============================================
+
+export {
+  encodeTOON,
+  decodeTOON,
+  formatToolResultTOON,
+  isTOONFormat,
+  smartDecode,
+  calculateTokenSavings,
+} from './helpers/toon';
 
 // ============================================
 // AI SDK v6 MIDDLEWARE & UTILITIES (Re-exports)

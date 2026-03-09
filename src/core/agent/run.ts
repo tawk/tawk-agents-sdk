@@ -9,8 +9,7 @@
  * **Features**:
  * - Standard execution with run()
  * - Streaming execution with runStream()
- * - State resumption for HITL
- * - Session integration
+ * - State resumption
  * - Context injection
  * 
  * @author Tawk.to
@@ -54,23 +53,22 @@ import type {
  * console.log(result.finalOutput);
  * ```
  * 
- * @example With Context and Session
+ * @example With Context
  * ```typescript
  * const result = await run(agent, 'What is my balance?', {
- *   context: { 
+ *   context: {
  *     userId: '123',
- *     database: db 
+ *     database: db
  *   },
- *   session: new MemorySession('user-123'),
  *   maxTurns: 10
  * });
  * ```
  * 
- * @example Resuming from State (HITL)
+ * @example Resuming from State
  * ```typescript
  * // Save state when paused
  * const state = result.state;
- * 
+ *
  * // Resume later
  * const resumed = await run(agent, state, options);
  * ```
@@ -83,7 +81,7 @@ export async function run<TContext = any, TOutput = string>(
   // Import runner dynamically to avoid circular dependencies
   const { AgenticRunner } = await import('../runner');
   
-  // Handle resuming from RunState (for human-in-the-loop)
+  // Handle resuming from RunState
   if (isRunState(input)) {
     return await resumeRun(input, options);
   }
@@ -262,7 +260,6 @@ export async function runStream<TContext = any, TOutput = string>(
 
 /**
  * Resume a paused agent run from saved state.
- * Used for human-in-the-loop workflows.
  * 
  * @template TContext - Type of context object
  * @template TOutput - Type of output
