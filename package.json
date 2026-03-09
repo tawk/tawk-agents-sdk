@@ -1,7 +1,7 @@
 {
   "name": "@tawk.to/tawk-agents-sdk",
   "version": "3.0.0",
-  "description": "Production-ready AI agent framework with true agentic architecture, multi-agent orchestration, dynamic HITL approvals, native MCP integration, and full observability.",
+  "description": "Production-ready AI agent framework with true agentic architecture, multi-agent orchestration, native MCP integration, and full observability.",
   "author": "Tawk.to <support@tawk.to>",
   "license": "MIT",
   "repository": {
@@ -48,9 +48,6 @@
     "tracing",
     "observability",
     "guardrails",
-    "human-in-the-loop",
-    "hitl",
-    "approvals",
     "tool-calling",
     "parallel-execution",
     "handoffs",
@@ -83,9 +80,6 @@
     "e2e:comprehensive": "ts-node tests/e2e/06-comprehensive-issues-solution-e2e.test.ts",
     "e2e:anthropic-research": "ts-node tests/e2e/07-anthropic-multi-agent-research-e2e.test.ts",
     "e2e": "npm run e2e:basic && npm run e2e:multi && npm run e2e:stream",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down -v",
-    "docker:logs": "docker-compose logs -f",
     "cli": "ts-node --transpile-only bin/tawk-cli.ts",
     "example": "ts-node examples/complete-examples.ts",
     "lint": "eslint src --ext .ts",
@@ -116,9 +110,7 @@
     }
   },
   "optionalDependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.2",
-    "ioredis": "^5.4.2",
-    "mongodb": "^6.12.0"
+    "@modelcontextprotocol/sdk": "^1.17.2"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^3.0.0",
