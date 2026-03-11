@@ -37,6 +37,7 @@ import {
   getLangfuse,
 } from '../lifecycle/langfuse';
 import {
+  createContextualSpan,
   getCurrentTrace,
   setCurrentSpan,
   runWithTraceContext,
@@ -477,12 +478,69 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           }
         });
 
-        // Call model
+        // Wrap tool execute functions to bridge contextWrapper and add Langfuse tracing.
+        // AI SDK v5 auto-executes tools with execute functions inside generateText.
+        // By wrapping them, we get tracing + context passing in a single execution.
+        const toolExecutionMeta = new Map<string, { duration: number; error?: Error }>();
+
+        const wrappedTools: Record<string, any> = {};
+        for (const [name, tool] of Object.entries(tools as Record<string, any>)) {
+          if (!tool.execute) {
+            wrappedTools[name] = tool;
+            continue;
+          }
+
+          const originalExecute = tool.execute;
+          wrappedTools[name] = {
+            ...tool,
+            execute: async (args: unknown) => {
+              const argsRecord = (args ?? {}) as Record<string, unknown>;
+              const argsKeys = Object.keys(argsRecord);
+
+              const span = createContextualSpan(`Tool: ${name}`, {
+                input: args,
+                metadata: {
+                  toolName: name,
+                  agentName: state.currentAgent.name,
+                  argsReceived: argsKeys.length > 0,
+                  argsKeys,
+                },
+              });
+
+              const startTime = Date.now();
+
+              try {
+                const result = await originalExecute(args, contextWrapper);
+                const duration = Date.now() - startTime;
+                toolExecutionMeta.set(name, { duration });
+
+                if (span) {
+                  const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
+                  span.end({ output: outputStr });
+                }
+
+                return result;
+              } catch (error) {
+                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                const duration = Date.now() - startTime;
+                toolExecutionMeta.set(name, { duration, error: normalizedError });
+
+                if (span) {
+                  span.end({ output: normalizedError.message, level: 'ERROR' });
+                }
+
+                throw error;
+              }
+            },
+          };
+        }
+
+        // Call model — AI SDK will auto-execute tools via our wrapped execute functions
         const modelResponse = await generateText({
           model: model as LanguageModel,
           system: systemMessage,
           messages: state.messages,
-          tools: tools as any,
+          tools: wrappedTools as any,
           temperature: state.currentAgent._modelSettings?.temperature,
           topP: state.currentAgent._modelSettings?.topP,
           maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
@@ -517,7 +575,8 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           state.currentAgent,
           state,
           contextWrapper,
-          modelResponse
+          modelResponse,
+          toolExecutionMeta
         );
 
         // Update state with new messages

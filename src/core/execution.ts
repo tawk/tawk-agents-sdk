@@ -306,7 +306,9 @@ export function processModelResponse<T extends ToolSet = ToolSet>(
     for (const responseMessage of responseMessages) {
       const message = responseMessage as ModelMessage;
 
+      // Include tool messages from AI SDK — they contain auto-executed results
       if (message.role === 'tool') {
+        newMessages.push(message);
         continue;
       }
 
@@ -476,24 +478,46 @@ export async function executeSingleStep<TContext = unknown>(
   agent: Agent<TContext, unknown>,
   state: RunState<TContext, Agent<TContext, unknown>>,
   contextWrapper: RunContextWrapper<TContext>,
-  modelResponse: GenerateTextResult<ToolSet, unknown>
+  modelResponse: GenerateTextResult<ToolSet, unknown>,
+  toolExecutionMeta?: Map<string, { duration: number; error?: Error }>
 ): Promise<SingleStepResult> {
   const processed = processModelResponse(modelResponse);
 
-  const toolCallInputs: ToolCallInput[] = [];
-  for (const toolCall of processed.toolCalls) {
-    toolCallInputs.push({
-      toolName: toolCall.toolName,
-      args: toolCall.args,
-      toolCallId: toolCall.toolCallId,
+  // Extract tool results from AI SDK response (already executed via wrapped tools in runner.ts)
+  const toolResults: ToolExecutionResult[] = [];
+
+  const aiToolResults = modelResponse.toolResults ?? [];
+  for (const aiResult of aiToolResults as any[]) {
+    const meta = toolExecutionMeta?.get(aiResult.toolName);
+    toolResults.push({
+      toolName: aiResult.toolName,
+      toolCallId: aiResult.toolCallId,
+      args: aiResult.input,
+      result: aiResult.output,
+      duration: meta?.duration ?? 0,
+      error: meta?.error,
     });
   }
 
-  const toolResults = await executeToolsInParallel(
-    agent._tools,
-    toolCallInputs,
-    contextWrapper
-  );
+  // Also extract tool errors from AI SDK content parts
+  const contentParts = (modelResponse as any).content ?? [];
+  for (const part of contentParts) {
+    if (part.type === 'tool-error') {
+      const meta = toolExecutionMeta?.get(part.toolName);
+      // Only add if not already tracked via toolResults
+      const alreadyTracked = toolResults.some(r => r.toolCallId === part.toolCallId);
+      if (!alreadyTracked) {
+        toolResults.push({
+          toolName: part.toolName,
+          toolCallId: part.toolCallId,
+          args: part.input,
+          result: null,
+          error: part.error instanceof Error ? part.error : new Error(String(part.error)),
+          duration: meta?.duration ?? 0,
+        });
+      }
+    }
+  }
 
   const preStepMessages: ModelMessage[] = [];
   for (const message of state.messages) {
@@ -514,58 +538,25 @@ export async function executeSingleStep<TContext = unknown>(
     hasReachedLimit: boolean;
   } | undefined;
 
-  if (toolResults.length > 0) {
-    const toolResultParts: Array<{
-      type: 'tool-result';
-      toolCallId: string;
-      toolName: string;
-      output: { type: 'error-text'; value: string } | { type: 'json'; value: unknown };
-    }> = [];
+  // Token budget enforcement on tool messages already included from AI SDK response
+  if (tokenBudget?.isEnabled() && toolResults.length > 0) {
+    for (const msg of newMessages) {
+      if (msg.role === 'tool' && Array.isArray(msg.content)) {
+        for (const part of msg.content as any[]) {
+          if (part.type === 'tool-result') {
+            const resultContent = JSON.stringify(part.output);
+            const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
 
-    for (const toolResult of toolResults) {
-      let output: { type: 'error-text'; value: string } | { type: 'json'; value: unknown };
-      if (toolResult.error) {
-        output = { type: 'error-text', value: toolResult.error.message };
-      } else {
-        output = { type: 'json', value: toolResult.result ?? null };
-      }
-
-      if (tokenBudget?.isEnabled()) {
-        const resultContent = JSON.stringify(output);
-        const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
-        
-        if (!tokenBudget.hasReachedLimit && tokenBudget.canAddMessage(estimatedTokens)) {
-          toolResultParts.push({
-            type: 'tool-result',
-            toolCallId: toolResult.toolCallId,
-            toolName: toolResult.toolName,
-            output,
-          });
-          tokenBudget.addTokens(estimatedTokens);
-        } else {
-          tokenBudget.markLimitReached();
-          toolResultParts.push({
-            type: 'tool-result',
-            toolCallId: toolResult.toolCallId,
-            toolName: toolResult.toolName,
-            output: { type: 'error-text' as const, value: 'Tool result unavailable' },
-          });
+            if (tokenBudget.hasReachedLimit || !tokenBudget.canAddMessage(estimatedTokens)) {
+              tokenBudget.markLimitReached();
+              part.output = 'Tool result unavailable';
+            } else {
+              tokenBudget.addTokens(estimatedTokens);
+            }
+          }
         }
-      } else {
-        toolResultParts.push({
-          type: 'tool-result',
-          toolCallId: toolResult.toolCallId,
-          toolName: toolResult.toolName,
-          output,
-        });
       }
     }
-
-    const toolMessage = {
-      role: 'tool' as const,
-      content: toolResultParts,
-    } as ModelMessage;
-    newMessages.push(toolMessage);
   }
 
   const combinedMessages: ModelMessage[] = [];

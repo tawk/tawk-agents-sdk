@@ -345,12 +345,60 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                         toolCount: Object.keys(tools || {}).length
                     }
                 });
-                // Call model
+                // Wrap tool execute functions to bridge contextWrapper and add Langfuse tracing.
+                // AI SDK v5 auto-executes tools with execute functions inside generateText.
+                // By wrapping them, we get tracing + context passing in a single execution.
+                const toolExecutionMeta = new Map();
+                const wrappedTools = {};
+                for (const [name, tool] of Object.entries(tools)) {
+                    if (!tool.execute) {
+                        wrappedTools[name] = tool;
+                        continue;
+                    }
+                    const originalExecute = tool.execute;
+                    wrappedTools[name] = {
+                        ...tool,
+                        execute: async (args) => {
+                            const argsRecord = (args ?? {});
+                            const argsKeys = Object.keys(argsRecord);
+                            const span = (0, context_1.createContextualSpan)(`Tool: ${name}`, {
+                                input: args,
+                                metadata: {
+                                    toolName: name,
+                                    agentName: state.currentAgent.name,
+                                    argsReceived: argsKeys.length > 0,
+                                    argsKeys,
+                                },
+                            });
+                            const startTime = Date.now();
+                            try {
+                                const result = await originalExecute(args, contextWrapper);
+                                const duration = Date.now() - startTime;
+                                toolExecutionMeta.set(name, { duration });
+                                if (span) {
+                                    const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
+                                    span.end({ output: outputStr });
+                                }
+                                return result;
+                            }
+                            catch (error) {
+                                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                                const duration = Date.now() - startTime;
+                                toolExecutionMeta.set(name, { duration, error: normalizedError });
+                                if (span) {
+                                    span.end({ output: normalizedError.message, level: 'ERROR' });
+                                }
+                                throw error;
+                            }
+                        },
+                    };
+                }
+                // Call model — AI SDK will auto-execute tools via our wrapped execute functions
                 const modelResponse = await (0, ai_1.generateText)({
                     model: model,
                     system: systemMessage,
                     messages: state.messages,
-                    tools: tools,
+                    tools: wrappedTools,
                     temperature: state.currentAgent._modelSettings?.temperature,
                     topP: state.currentAgent._modelSettings?.topP,
                     maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
@@ -379,7 +427,7 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     });
                 }
                 // Execute single step with AUTONOMOUS decision making
-                const stepResult = await (0, execution_1.executeSingleStep)(state.currentAgent, state, contextWrapper, modelResponse);
+                const stepResult = await (0, execution_1.executeSingleStep)(state.currentAgent, state, contextWrapper, modelResponse, toolExecutionMeta);
                 // Update state with new messages
                 state.messages = stepResult.messages;
                 if (tokenBudget.hasReachedLimit) {
