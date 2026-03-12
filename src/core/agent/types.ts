@@ -30,6 +30,9 @@ import type { Usage } from '../usage';
 /** Tokenizer function for estimating token counts. Can be sync or async. */
 export type TokenizerFn = (text: string) => number | Promise<number>;
 
+/** Image tokenizer function for estimating token counts of image content parts. */
+export type ImageTokenizerFn = (imagePart: object) => number | Promise<number>;
+
 // ============================================
 // TOOL DEFINITIONS
 // ============================================
@@ -133,6 +136,8 @@ export interface AgentConfig<TContext = any, TOutput = string> {
   };
   /** Custom tokenizer (default: 4 chars = 1 token) */
   tokenizerFn?: TokenizerFn;
+  /** Custom image tokenizer (default: 2840 tokens per image) */
+  imageTokenizerFn?: ImageTokenizerFn;
   onStepFinish?: (step: StepResult) => void | Promise<void>;
   shouldFinish?: (context: TContext, toolResults: any[]) => boolean;
   useTOON?: boolean;

@@ -20,7 +20,7 @@
  * @version 1.0.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Agent = exports.defaultTokenizerFn = void 0;
+exports.Agent = exports.defaultImageTokenizerFn = exports.defaultTokenizerFn = void 0;
 exports.setDefaultModel = setDefaultModel;
 exports.getDefaultModel = getDefaultModel;
 const zod_1 = require("zod");
@@ -35,6 +35,11 @@ const defaultTokenizerFn = (text) => {
     return Math.ceil(text.length / 4);
 };
 exports.defaultTokenizerFn = defaultTokenizerFn;
+/** Default image tokenizer: fixed 2840 tokens per image (matches legacy estimate) */
+const defaultImageTokenizerFn = () => {
+    return 2840;
+};
+exports.defaultImageTokenizerFn = defaultImageTokenizerFn;
 /**
  * Set the default language model for all agents.
  * Agents without an explicit model will use this default.
@@ -138,6 +143,7 @@ class Agent extends lifecycle_1.AgentHooks {
         this.shouldFinish = config.shouldFinish;
         this.useTOON = config.useTOON || false;
         this.tokenizerFn = config.tokenizerFn || exports.defaultTokenizerFn;
+        this.imageTokenizerFn = config.imageTokenizerFn || exports.defaultImageTokenizerFn;
         // Setup transfer tools for subagents
         this._setupTransferTools();
     }
@@ -275,6 +281,7 @@ class Agent extends lifecycle_1.AgentHooks {
             maxSteps: overrides.maxSteps ?? this.maxSteps,
             modelSettings: overrides.modelSettings ?? this.modelSettings,
             tokenizerFn: overrides.tokenizerFn ?? this.tokenizerFn,
+            imageTokenizerFn: overrides.imageTokenizerFn ?? this.imageTokenizerFn,
             onStepFinish: overrides.onStepFinish ?? this.onStepFinish,
             shouldFinish: overrides.shouldFinish ?? this.shouldFinish,
             useTOON: overrides.useTOON ?? this.useTOON
@@ -337,6 +344,7 @@ class Agent extends lifecycle_1.AgentHooks {
     get _maxSteps() { return this.maxSteps; }
     get _modelSettings() { return this.modelSettings; }
     get _tokenizerFn() { return this.tokenizerFn; }
+    get _imageTokenizerFn() { return this.imageTokenizerFn; }
     get _onStepFinish() { return this.onStepFinish; }
     get _shouldFinish() { return this.shouldFinish; }
     get _useTOON() { return this.useTOON; }

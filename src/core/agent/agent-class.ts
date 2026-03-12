@@ -27,6 +27,7 @@ import type {
   AgentConfig,
   CoreTool,
   Guardrail,
+  ImageTokenizerFn,
   RunContextWrapper,
   StepResult,
   TokenizerFn,
@@ -41,6 +42,11 @@ let defaultModel: LanguageModel | null = null;
 /** Default tokenizer: 4 chars ≈ 1 token */
 export const defaultTokenizerFn: TokenizerFn = (text: string): number => {
   return Math.ceil(text.length / 4);
+};
+
+/** Default image tokenizer: fixed 2840 tokens per image (matches legacy estimate) */
+export const defaultImageTokenizerFn: ImageTokenizerFn = (): number => {
+  return 2840;
 };
 
 /**
@@ -167,7 +173,10 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
   
   /** Tokenizer function for calculating token counts */
   private tokenizerFn: TokenizerFn;
-  
+
+  /** Image tokenizer function for calculating image token counts */
+  private imageTokenizerFn: ImageTokenizerFn;
+
   /** Cached static instructions for performance */
   private cachedInstructions?: string;
 
@@ -202,6 +211,7 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
     this.shouldFinish = config.shouldFinish;
     this.useTOON = config.useTOON || false;
     this.tokenizerFn = config.tokenizerFn || defaultTokenizerFn;
+    this.imageTokenizerFn = config.imageTokenizerFn || defaultImageTokenizerFn;
 
     // Setup transfer tools for subagents
     this._setupTransferTools();
@@ -359,6 +369,7 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
       maxSteps: overrides.maxSteps ?? this.maxSteps,
       modelSettings: overrides.modelSettings ?? this.modelSettings,
       tokenizerFn: overrides.tokenizerFn ?? this.tokenizerFn,
+      imageTokenizerFn: overrides.imageTokenizerFn ?? this.imageTokenizerFn,
       onStepFinish: overrides.onStepFinish ?? this.onStepFinish,
       shouldFinish: overrides.shouldFinish ?? this.shouldFinish,
       useTOON: overrides.useTOON ?? this.useTOON
@@ -428,6 +439,7 @@ export class Agent<TContext = any, TOutput = string> extends AgentHooks<TContext
   get _maxSteps() { return this.maxSteps; }
   get _modelSettings() { return this.modelSettings; }
   get _tokenizerFn() { return this.tokenizerFn; }
+  get _imageTokenizerFn() { return this.imageTokenizerFn; }
   get _onStepFinish() { return this.onStepFinish; }
   get _shouldFinish() { return this.shouldFinish; }
   get _useTOON() { return this.useTOON; }

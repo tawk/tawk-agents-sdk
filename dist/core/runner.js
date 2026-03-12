@@ -57,6 +57,7 @@ class TokenBudgetTracker {
         this.hasReachedLimit = false;
         this.maxTokens = options.maxTokens;
         this.tokenizerFn = options.tokenizerFn;
+        this.imageTokenizerFn = options.imageTokenizerFn || (() => 2840);
         this.reservedResponseTokens = options.reservedResponseTokens ?? 1500;
         this.alreadyUsedTokens = options.alreadyUsedTokens ?? 0;
     }
@@ -66,6 +67,24 @@ class TokenBudgetTracker {
     async estimateTokens(content) {
         const text = typeof content === 'string' ? content : JSON.stringify(content);
         return await this.tokenizerFn(text);
+    }
+    async estimateMessageTokens(content) {
+        if (typeof content === 'string') {
+            return await this.estimateTokens(content);
+        }
+        if (Array.isArray(content)) {
+            let total = 0;
+            for (const part of content) {
+                if (part && typeof part === 'object' && 'type' in part && part.type === 'image') {
+                    total += await this.imageTokenizerFn(part);
+                }
+                else {
+                    total += await this.estimateTokens(part);
+                }
+            }
+            return total;
+        }
+        return await this.estimateTokens(content);
     }
     setInitialContext(tokens) {
         this.estimatedContextTokens = tokens;
@@ -233,13 +252,14 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                 const tokenBudget = new TokenBudgetTracker({
                     maxTokens: state.currentAgent._modelSettings?.maxTokens,
                     tokenizerFn: state.currentAgent._tokenizerFn,
+                    imageTokenizerFn: state.currentAgent._imageTokenizerFn,
                     reservedResponseTokens: estimatedResponseTokens,
                     alreadyUsedTokens: 0, // Don't count previous usage - only current context matters
                 });
                 if (tokenBudget.isEnabled()) {
                     let estimatedInputTokens = await tokenBudget.estimateTokens(systemMessage);
                     for (const msg of state.messages) {
-                        estimatedInputTokens += await tokenBudget.estimateTokens(JSON.stringify(msg.content));
+                        estimatedInputTokens += await tokenBudget.estimateMessageTokens(msg.content);
                     }
                     if (tools && Object.keys(tools).length > 0) {
                         estimatedInputTokens += await tokenBudget.estimateTokens(tools);
