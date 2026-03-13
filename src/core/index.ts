@@ -5,7 +5,7 @@
  */
 
 export { Agent, run, runStream, setDefaultModel, tool } from './agent';
-export { defaultTokenizerFn } from './agent/agent-class';
+export { defaultTokenizerFn, defaultImageTokenizerFn } from './agent/agent-class';
 export type {
   AgentConfig,
   AgentMetric,
@@ -15,6 +15,7 @@ export type {
   StepResult,
   RunContextWrapper,
   TokenizerFn,
+  ImageTokenizerFn,
 } from './agent';
 
 export {

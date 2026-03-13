@@ -21,9 +21,11 @@
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
 import { AgentHooks } from '../../lifecycle';
-import type { AgentConfig, CoreTool, Guardrail, RunContextWrapper, StepResult, TokenizerFn } from './types';
+import type { AgentConfig, CoreTool, Guardrail, ImageTokenizerFn, RunContextWrapper, StepResult, TokenizerFn } from './types';
 /** Default tokenizer: 4 chars ≈ 1 token */
 export declare const defaultTokenizerFn: TokenizerFn;
+/** Default image tokenizer: fixed 2840 tokens per image (matches legacy estimate) */
+export declare const defaultImageTokenizerFn: ImageTokenizerFn;
 /**
  * Set the default language model for all agents.
  * Agents without an explicit model will use this default.
@@ -119,6 +121,8 @@ export declare class Agent<TContext = any, TOutput = string> extends AgentHooks<
     private useTOON?;
     /** Tokenizer function for calculating token counts */
     private tokenizerFn;
+    /** Image tokenizer function for calculating image token counts */
+    private imageTokenizerFn;
     /** Cached static instructions for performance */
     private cachedInstructions?;
     /**
@@ -257,8 +261,10 @@ export declare class Agent<TContext = any, TOutput = string> extends AgentHooks<
         maxTokens?: number;
         presencePenalty?: number;
         frequencyPenalty?: number;
+        providerOptions?: Record<string, Record<string, unknown>>;
     } | undefined;
     get _tokenizerFn(): TokenizerFn;
+    get _imageTokenizerFn(): ImageTokenizerFn;
     get _onStepFinish(): ((step: StepResult) => void | Promise<void>) | undefined;
     get _shouldFinish(): ((context: TContext, toolResults: any[]) => boolean) | undefined;
     get _useTOON(): boolean | undefined;

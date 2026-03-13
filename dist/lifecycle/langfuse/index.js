@@ -79,7 +79,6 @@ function initializeLangfuse() {
             requestTimeout: 10000,
         });
         isEnabled = true;
-        console.log('✅ Langfuse tracing initialized:', baseUrl);
         return langfuseInstance;
     }
     catch (error) {

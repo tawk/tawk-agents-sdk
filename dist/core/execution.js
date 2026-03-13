@@ -4,6 +4,7 @@
  * @module core/execution
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.checkToolNeedsApproval = checkToolNeedsApproval;
 exports.executeToolsInParallel = executeToolsInParallel;
 exports.processModelResponse = processModelResponse;
 exports.determineNextStep = determineNextStep;
@@ -12,6 +13,16 @@ const runstate_1 = require("./runstate");
 const context_1 = require("../tracing/context");
 const TRANSFER_PREFIXES = ['transfer_to_', 'handoff_to_'];
 const TOOL_EXECUTION_BATCH_SIZE = 3;
+function safeStringify(value) {
+    if (typeof value === 'string')
+        return value;
+    try {
+        return JSON.stringify(value ?? null);
+    }
+    catch {
+        return '[unserializable]';
+    }
+}
 /**
  * Checks if a tool name is a transfer/handoff tool
  * @param toolName Tool name to check
@@ -138,8 +149,7 @@ async function executeSingleTool(tools, toolCall, contextWrapper) {
     try {
         const result = await tool.execute(args, contextWrapper);
         if (span) {
-            const outputString = typeof result === 'string' ? result : JSON.stringify(result);
-            span.end({ output: outputString });
+            span.end({ output: safeStringify(result) });
         }
         return {
             toolName,
@@ -214,7 +224,9 @@ function processModelResponse(response) {
     if (responseMessages && responseMessages.length > 0) {
         for (const responseMessage of responseMessages) {
             const message = responseMessage;
+            // Include tool messages from AI SDK — they contain auto-executed results
             if (message.role === 'tool') {
+                newMessages.push(message);
                 continue;
             }
             if (message.role === 'assistant' && Array.isArray(message.content)) {
@@ -225,9 +237,7 @@ function processModelResponse(response) {
                         // AI SDK uses 'input', but 'args' is kept for backwards compatibility with older versions
                         const toolInput = part.input ?? part.args ?? {};
                         transformedContent.push({
-                            type: 'tool-call',
-                            toolCallId: part.toolCallId,
-                            toolName: part.toolName,
+                            ...part,
                             input: typeof toolInput === 'object' ? toolInput : {},
                         });
                     }
@@ -346,17 +356,43 @@ async function determineNextStep(agent, processed, toolResults, context) {
  * @param modelResponse Response from generateText
  * @returns Single step result with next step decision
  */
-async function executeSingleStep(agent, state, contextWrapper, modelResponse) {
+async function executeSingleStep(agent, state, contextWrapper, modelResponse, toolExecutionMeta) {
     const processed = processModelResponse(modelResponse);
-    const toolCallInputs = [];
-    for (const toolCall of processed.toolCalls) {
-        toolCallInputs.push({
-            toolName: toolCall.toolName,
-            args: toolCall.args,
-            toolCallId: toolCall.toolCallId,
+    // Extract tool results from AI SDK response (already executed via wrapped tools in runner.ts)
+    const toolResults = [];
+    const aiToolResults = modelResponse.toolResults ?? [];
+    for (const aiResult of aiToolResults) {
+        const meta = toolExecutionMeta?.get(aiResult.toolCallId) ?? toolExecutionMeta?.get(aiResult.toolName);
+        toolResults.push({
+            toolName: aiResult.toolName,
+            toolCallId: aiResult.toolCallId,
+            args: aiResult.input,
+            result: aiResult.output,
+            duration: meta?.duration ?? 0,
+            error: meta?.error,
+            needsApproval: meta?.needsApproval,
+            approved: meta?.needsApproval ? false : undefined,
         });
     }
-    const toolResults = await executeToolsInParallel(agent._tools, toolCallInputs, contextWrapper);
+    // Also extract tool errors from AI SDK content parts
+    const contentParts = modelResponse.content ?? [];
+    for (const part of contentParts) {
+        if (part.type === 'tool-error') {
+            const meta = toolExecutionMeta?.get(part.toolCallId) ?? toolExecutionMeta?.get(part.toolName);
+            // Only add if not already tracked via toolResults
+            const alreadyTracked = toolResults.some(r => r.toolCallId === part.toolCallId);
+            if (!alreadyTracked) {
+                toolResults.push({
+                    toolName: part.toolName,
+                    toolCallId: part.toolCallId,
+                    args: part.input,
+                    result: null,
+                    error: part.error instanceof Error ? part.error : new Error(String(part.error)),
+                    duration: meta?.duration ?? 0,
+                });
+            }
+        }
+    }
     const preStepMessages = [];
     for (const message of state.messages) {
         preStepMessages.push(message);
@@ -366,52 +402,25 @@ async function executeSingleStep(agent, state, contextWrapper, modelResponse) {
         newMessages.push(message);
     }
     const tokenBudget = state._tokenBudget;
-    if (toolResults.length > 0) {
-        const toolResultParts = [];
-        for (const toolResult of toolResults) {
-            let output;
-            if (toolResult.error) {
-                output = { type: 'error-text', value: toolResult.error.message };
-            }
-            else {
-                output = { type: 'json', value: toolResult.result ?? null };
-            }
-            if (tokenBudget?.isEnabled()) {
-                const resultContent = JSON.stringify(output);
-                const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
-                if (!tokenBudget.hasReachedLimit && tokenBudget.canAddMessage(estimatedTokens)) {
-                    toolResultParts.push({
-                        type: 'tool-result',
-                        toolCallId: toolResult.toolCallId,
-                        toolName: toolResult.toolName,
-                        output,
-                    });
-                    tokenBudget.addTokens(estimatedTokens);
+    // Token budget enforcement on tool messages already included from AI SDK response
+    if (tokenBudget?.isEnabled() && toolResults.length > 0) {
+        for (const msg of newMessages) {
+            if (msg.role === 'tool' && Array.isArray(msg.content)) {
+                for (const part of msg.content) {
+                    if (part.type === 'tool-result') {
+                        const resultContent = safeStringify(part.output);
+                        const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
+                        if (tokenBudget.hasReachedLimit || !tokenBudget.canAddMessage(estimatedTokens)) {
+                            tokenBudget.markLimitReached();
+                            part.output = 'Tool result unavailable';
+                        }
+                        else {
+                            tokenBudget.addTokens(estimatedTokens);
+                        }
+                    }
                 }
-                else {
-                    tokenBudget.markLimitReached();
-                    toolResultParts.push({
-                        type: 'tool-result',
-                        toolCallId: toolResult.toolCallId,
-                        toolName: toolResult.toolName,
-                        output: { type: 'error-text', value: 'Tool result unavailable' },
-                    });
-                }
-            }
-            else {
-                toolResultParts.push({
-                    type: 'tool-result',
-                    toolCallId: toolResult.toolCallId,
-                    toolName: toolResult.toolName,
-                    output,
-                });
             }
         }
-        const toolMessage = {
-            role: 'tool',
-            content: toolResultParts,
-        };
-        newMessages.push(toolMessage);
     }
     const combinedMessages = [];
     for (const message of state.messages) {

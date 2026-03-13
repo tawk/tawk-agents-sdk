@@ -45,6 +45,7 @@ export declare class TokenLimitExceededError extends Error {
 export declare class TokenBudgetTracker {
     private maxTokens;
     private tokenizerFn;
+    private imageTokenizerFn;
     private estimatedContextTokens;
     private reservedResponseTokens;
     private alreadyUsedTokens;
@@ -52,11 +53,13 @@ export declare class TokenBudgetTracker {
     constructor(options: {
         maxTokens?: number;
         tokenizerFn: (text: string) => number | Promise<number>;
+        imageTokenizerFn?: (imagePart: object) => number | Promise<number>;
         reservedResponseTokens?: number;
         alreadyUsedTokens?: number;
     });
     isEnabled(): boolean;
     estimateTokens(content: string | object): Promise<number>;
+    estimateMessageTokens(content: unknown): Promise<number>;
     setInitialContext(tokens: number): void;
     addTokens(tokens: number): void;
     getTotalTokens(): number;

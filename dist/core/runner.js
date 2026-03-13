@@ -57,6 +57,7 @@ class TokenBudgetTracker {
         this.hasReachedLimit = false;
         this.maxTokens = options.maxTokens;
         this.tokenizerFn = options.tokenizerFn;
+        this.imageTokenizerFn = options.imageTokenizerFn || (() => 2840);
         this.reservedResponseTokens = options.reservedResponseTokens ?? 1500;
         this.alreadyUsedTokens = options.alreadyUsedTokens ?? 0;
     }
@@ -66,6 +67,24 @@ class TokenBudgetTracker {
     async estimateTokens(content) {
         const text = typeof content === 'string' ? content : JSON.stringify(content);
         return await this.tokenizerFn(text);
+    }
+    async estimateMessageTokens(content) {
+        if (typeof content === 'string') {
+            return await this.estimateTokens(content);
+        }
+        if (Array.isArray(content)) {
+            let total = 0;
+            for (const part of content) {
+                if (part && typeof part === 'object' && 'type' in part && part.type === 'image') {
+                    total += await this.imageTokenizerFn(part);
+                }
+                else {
+                    total += await this.estimateTokens(part);
+                }
+            }
+            return total;
+        }
+        return await this.estimateTokens(content);
     }
     setInitialContext(tokens) {
         this.estimatedContextTokens = tokens;
@@ -233,13 +252,14 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                 const tokenBudget = new TokenBudgetTracker({
                     maxTokens: state.currentAgent._modelSettings?.maxTokens,
                     tokenizerFn: state.currentAgent._tokenizerFn,
+                    imageTokenizerFn: state.currentAgent._imageTokenizerFn,
                     reservedResponseTokens: estimatedResponseTokens,
                     alreadyUsedTokens: 0, // Don't count previous usage - only current context matters
                 });
                 if (tokenBudget.isEnabled()) {
                     let estimatedInputTokens = await tokenBudget.estimateTokens(systemMessage);
                     for (const msg of state.messages) {
-                        estimatedInputTokens += await tokenBudget.estimateTokens(JSON.stringify(msg.content));
+                        estimatedInputTokens += await tokenBudget.estimateMessageTokens(msg.content);
                     }
                     if (tools && Object.keys(tools).length > 0) {
                         estimatedInputTokens += await tokenBudget.estimateTokens(tools);
@@ -329,8 +349,13 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                         maxTokens: state.currentAgent._modelSettings?.responseTokens,
                     },
                     input: {
-                        system: systemMessage.substring(0, 200),
-                        messages: state.messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.substring(0, 100) : '...' })),
+                        system: systemMessage,
+                        messages: state.messages.map(m => {
+                            if (typeof m.content === 'string') {
+                                return { role: m.role, content: m.content };
+                            }
+                            return { role: m.role, content: JSON.stringify(m.content) };
+                        }),
                         tools: Object.keys(tools || {})
                     },
                     metadata: {
@@ -340,24 +365,88 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                         toolCount: Object.keys(tools || {}).length
                     }
                 });
-                // Call model
+                // Wrap tool execute functions to bridge contextWrapper and add Langfuse tracing.
+                // AI SDK v5 auto-executes tools with execute functions inside generateText.
+                // By wrapping them, we get tracing + context passing in a single execution.
+                const toolExecutionMeta = new Map();
+                const wrappedTools = {};
+                for (const [name, tool] of Object.entries(tools)) {
+                    if (!tool.execute) {
+                        wrappedTools[name] = tool;
+                        continue;
+                    }
+                    const originalExecute = tool.execute;
+                    wrappedTools[name] = {
+                        ...tool,
+                        execute: async (args, aiSdkOptions) => {
+                            const toolCallId = aiSdkOptions?.toolCallId || `${name}_${Date.now()}`;
+                            const metaKey = toolCallId;
+                            // Check if tool requires approval before executing
+                            const needsApproval = await (0, execution_1.checkToolNeedsApproval)(tool, contextWrapper);
+                            if (needsApproval) {
+                                toolExecutionMeta.set(metaKey, { duration: 0, needsApproval: true });
+                                return 'Tool execution requires approval';
+                            }
+                            const argsRecord = (args ?? {});
+                            const argsKeys = Object.keys(argsRecord);
+                            const span = (0, context_1.createContextualSpan)(`Tool: ${name}`, {
+                                input: args,
+                                metadata: {
+                                    toolName: name,
+                                    toolCallId,
+                                    agentName: state.currentAgent.name,
+                                    argsReceived: argsKeys.length > 0,
+                                    argsKeys,
+                                },
+                            });
+                            const startTime = Date.now();
+                            try {
+                                const result = await originalExecute(args, contextWrapper);
+                                const duration = Date.now() - startTime;
+                                toolExecutionMeta.set(metaKey, { duration });
+                                if (span) {
+                                    let outputStr;
+                                    try {
+                                        outputStr = typeof result === 'string' ? result : JSON.stringify(result ?? null);
+                                    }
+                                    catch {
+                                        outputStr = '[unserializable tool result]';
+                                    }
+                                    span.end({ output: outputStr });
+                                }
+                                return result;
+                            }
+                            catch (error) {
+                                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                                const duration = Date.now() - startTime;
+                                toolExecutionMeta.set(metaKey, { duration, error: normalizedError });
+                                if (span) {
+                                    span.end({ output: normalizedError.message, level: 'ERROR' });
+                                }
+                                throw error;
+                            }
+                        },
+                    };
+                }
+                // Call model — AI SDK will auto-execute tools via our wrapped execute functions
                 const modelResponse = await (0, ai_1.generateText)({
                     model: model,
                     system: systemMessage,
                     messages: state.messages,
-                    tools: tools,
+                    tools: wrappedTools,
                     temperature: state.currentAgent._modelSettings?.temperature,
                     topP: state.currentAgent._modelSettings?.topP,
                     maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,
                     presencePenalty: state.currentAgent._modelSettings?.presencePenalty,
                     frequencyPenalty: state.currentAgent._modelSettings?.frequencyPenalty,
+                    providerOptions: state.currentAgent._modelSettings?.providerOptions,
                 });
                 // End generation with proper usage tracking
                 if (generation) {
                     const usage = modelResponse.usage || {};
                     generation.end({
                         output: {
-                            text: modelResponse.text.substring(0, 200),
+                            text: modelResponse.text,
                             toolCalls: modelResponse.toolCalls?.length || 0,
                             finishReason: modelResponse.finishReason
                         },
@@ -373,7 +462,7 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     });
                 }
                 // Execute single step with AUTONOMOUS decision making
-                const stepResult = await (0, execution_1.executeSingleStep)(state.currentAgent, state, contextWrapper, modelResponse);
+                const stepResult = await (0, execution_1.executeSingleStep)(state.currentAgent, state, contextWrapper, modelResponse, toolExecutionMeta);
                 // Update state with new messages
                 state.messages = stepResult.messages;
                 if (tokenBudget.hasReachedLimit) {
@@ -438,19 +527,8 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     // End agent span with accumulated token usage
                     if (state.currentAgentSpan) {
                         const agentMetrics = state.agentMetrics.get(state.currentAgent.name);
-                        // Configurable truncation for Langfuse (default: 5000 chars, set to 0 for no truncation)
-                        const maxOutputLength = process.env.LANGFUSE_MAX_OUTPUT_LENGTH
-                            ? parseInt(process.env.LANGFUSE_MAX_OUTPUT_LENGTH)
-                            : 5000;
-                        const truncatedOutput = maxOutputLength > 0 && finalOutputString.length > maxOutputLength
-                            ? finalOutputString.substring(0, maxOutputLength) + '... (truncated)'
-                            : finalOutputString;
                         state.currentAgentSpan.end({
-                            output: truncatedOutput,
-                            metadata: {
-                                fullLength: finalOutputString.length,
-                                truncated: finalOutputString.length > maxOutputLength
-                            },
+                            output: finalOutputString,
                             usage: agentMetrics ? {
                                 input: agentMetrics.tokens.input,
                                 output: agentMetrics.tokens.output,
