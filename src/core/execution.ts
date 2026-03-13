@@ -18,6 +18,15 @@ import { createContextualSpan } from '../tracing/context';
 const TRANSFER_PREFIXES = ['transfer_to_', 'handoff_to_'] as const;
 const TOOL_EXECUTION_BATCH_SIZE = 3;
 
+function safeStringify(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value ?? null);
+  } catch {
+    return '[unserializable]';
+  }
+}
+
 /** Tool call extracted from model response */
 export interface ExtractedToolCall {
   toolName: string;
@@ -94,7 +103,7 @@ function extractTargetAgentName(toolName: string): string {
  * @param contextWrapper Execution context
  * @returns True if the tool needs approval
  */
-async function checkToolNeedsApproval<TContext>(
+export async function checkToolNeedsApproval<TContext>(
   tool: CoreTool,
   contextWrapper: RunContextWrapper<TContext>
 ): Promise<boolean> {
@@ -217,8 +226,7 @@ async function executeSingleTool<TContext>(
     const result: unknown = await tool.execute(args, contextWrapper);
 
     if (span) {
-      const outputString = typeof result === 'string' ? result : JSON.stringify(result);
-      span.end({ output: outputString });
+      span.end({ output: safeStringify(result) });
     }
 
     return {
@@ -479,7 +487,7 @@ export async function executeSingleStep<TContext = unknown>(
   state: RunState<TContext, Agent<TContext, unknown>>,
   contextWrapper: RunContextWrapper<TContext>,
   modelResponse: GenerateTextResult<ToolSet, unknown>,
-  toolExecutionMeta?: Map<string, { duration: number; error?: Error }>
+  toolExecutionMeta?: Map<string, { duration: number; error?: Error; needsApproval?: boolean }>
 ): Promise<SingleStepResult> {
   const processed = processModelResponse(modelResponse);
 
@@ -488,7 +496,7 @@ export async function executeSingleStep<TContext = unknown>(
 
   const aiToolResults = modelResponse.toolResults ?? [];
   for (const aiResult of aiToolResults as any[]) {
-    const meta = toolExecutionMeta?.get(aiResult.toolName);
+    const meta = toolExecutionMeta?.get(aiResult.toolCallId) ?? toolExecutionMeta?.get(aiResult.toolName);
     toolResults.push({
       toolName: aiResult.toolName,
       toolCallId: aiResult.toolCallId,
@@ -496,6 +504,8 @@ export async function executeSingleStep<TContext = unknown>(
       result: aiResult.output,
       duration: meta?.duration ?? 0,
       error: meta?.error,
+      needsApproval: meta?.needsApproval,
+      approved: meta?.needsApproval ? false : undefined,
     });
   }
 
@@ -503,7 +513,7 @@ export async function executeSingleStep<TContext = unknown>(
   const contentParts = (modelResponse as any).content ?? [];
   for (const part of contentParts) {
     if (part.type === 'tool-error') {
-      const meta = toolExecutionMeta?.get(part.toolName);
+      const meta = toolExecutionMeta?.get(part.toolCallId) ?? toolExecutionMeta?.get(part.toolName);
       // Only add if not already tracked via toolResults
       const alreadyTracked = toolResults.some(r => r.toolCallId === part.toolCallId);
       if (!alreadyTracked) {
@@ -544,7 +554,7 @@ export async function executeSingleStep<TContext = unknown>(
       if (msg.role === 'tool' && Array.isArray(msg.content)) {
         for (const part of msg.content as any[]) {
           if (part.type === 'tool-result') {
-            const resultContent = JSON.stringify(part.output);
+            const resultContent = safeStringify(part.output);
             const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
 
             if (tokenBudget.hasReachedLimit || !tokenBudget.canAddMessage(estimatedTokens)) {

@@ -378,13 +378,22 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                     const originalExecute = tool.execute;
                     wrappedTools[name] = {
                         ...tool,
-                        execute: async (args) => {
+                        execute: async (args, aiSdkOptions) => {
+                            const toolCallId = aiSdkOptions?.toolCallId || `${name}_${Date.now()}`;
+                            const metaKey = toolCallId;
+                            // Check if tool requires approval before executing
+                            const needsApproval = await (0, execution_1.checkToolNeedsApproval)(tool, contextWrapper);
+                            if (needsApproval) {
+                                toolExecutionMeta.set(metaKey, { duration: 0, needsApproval: true });
+                                return 'Tool execution requires approval';
+                            }
                             const argsRecord = (args ?? {});
                             const argsKeys = Object.keys(argsRecord);
                             const span = (0, context_1.createContextualSpan)(`Tool: ${name}`, {
                                 input: args,
                                 metadata: {
                                     toolName: name,
+                                    toolCallId,
                                     agentName: state.currentAgent.name,
                                     argsReceived: argsKeys.length > 0,
                                     argsKeys,
@@ -394,9 +403,15 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                             try {
                                 const result = await originalExecute(args, contextWrapper);
                                 const duration = Date.now() - startTime;
-                                toolExecutionMeta.set(name, { duration });
+                                toolExecutionMeta.set(metaKey, { duration });
                                 if (span) {
-                                    const outputStr = typeof result === 'string' ? result : JSON.stringify(result);
+                                    let outputStr;
+                                    try {
+                                        outputStr = typeof result === 'string' ? result : JSON.stringify(result ?? null);
+                                    }
+                                    catch {
+                                        outputStr = '[unserializable tool result]';
+                                    }
                                     span.end({ output: outputStr });
                                 }
                                 return result;
@@ -404,7 +419,7 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                             catch (error) {
                                 const normalizedError = error instanceof Error ? error : new Error(String(error));
                                 const duration = Date.now() - startTime;
-                                toolExecutionMeta.set(name, { duration, error: normalizedError });
+                                toolExecutionMeta.set(metaKey, { duration, error: normalizedError });
                                 if (span) {
                                     span.end({ output: normalizedError.message, level: 'ERROR' });
                                 }

@@ -43,6 +43,13 @@ interface ToolCallInput {
     toolCallId: string;
 }
 /**
+ * Checks if a tool requires approval before execution
+ * @param tool Tool to check
+ * @param contextWrapper Execution context
+ * @returns True if the tool needs approval
+ */
+export declare function checkToolNeedsApproval<TContext>(tool: CoreTool, contextWrapper: RunContextWrapper<TContext>): Promise<boolean>;
+/**
  * Executes tool calls in parallel batches to reduce system strain
  * @param tools Available tools dictionary
  * @param toolCalls Tool calls to execute
@@ -76,6 +83,7 @@ export declare function determineNextStep<TContext = unknown>(agent: Agent<TCont
 export declare function executeSingleStep<TContext = unknown>(agent: Agent<TContext, unknown>, state: RunState<TContext, Agent<TContext, unknown>>, contextWrapper: RunContextWrapper<TContext>, modelResponse: GenerateTextResult<ToolSet, unknown>, toolExecutionMeta?: Map<string, {
     duration: number;
     error?: Error;
+    needsApproval?: boolean;
 }>): Promise<SingleStepResult>;
 export {};
 //# sourceMappingURL=execution.d.ts.map

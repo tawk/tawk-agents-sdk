@@ -4,6 +4,7 @@
  * @module core/execution
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.checkToolNeedsApproval = checkToolNeedsApproval;
 exports.executeToolsInParallel = executeToolsInParallel;
 exports.processModelResponse = processModelResponse;
 exports.determineNextStep = determineNextStep;
@@ -12,6 +13,16 @@ const runstate_1 = require("./runstate");
 const context_1 = require("../tracing/context");
 const TRANSFER_PREFIXES = ['transfer_to_', 'handoff_to_'];
 const TOOL_EXECUTION_BATCH_SIZE = 3;
+function safeStringify(value) {
+    if (typeof value === 'string')
+        return value;
+    try {
+        return JSON.stringify(value ?? null);
+    }
+    catch {
+        return '[unserializable]';
+    }
+}
 /**
  * Checks if a tool name is a transfer/handoff tool
  * @param toolName Tool name to check
@@ -138,8 +149,7 @@ async function executeSingleTool(tools, toolCall, contextWrapper) {
     try {
         const result = await tool.execute(args, contextWrapper);
         if (span) {
-            const outputString = typeof result === 'string' ? result : JSON.stringify(result);
-            span.end({ output: outputString });
+            span.end({ output: safeStringify(result) });
         }
         return {
             toolName,
@@ -352,7 +362,7 @@ async function executeSingleStep(agent, state, contextWrapper, modelResponse, to
     const toolResults = [];
     const aiToolResults = modelResponse.toolResults ?? [];
     for (const aiResult of aiToolResults) {
-        const meta = toolExecutionMeta?.get(aiResult.toolName);
+        const meta = toolExecutionMeta?.get(aiResult.toolCallId) ?? toolExecutionMeta?.get(aiResult.toolName);
         toolResults.push({
             toolName: aiResult.toolName,
             toolCallId: aiResult.toolCallId,
@@ -360,13 +370,15 @@ async function executeSingleStep(agent, state, contextWrapper, modelResponse, to
             result: aiResult.output,
             duration: meta?.duration ?? 0,
             error: meta?.error,
+            needsApproval: meta?.needsApproval,
+            approved: meta?.needsApproval ? false : undefined,
         });
     }
     // Also extract tool errors from AI SDK content parts
     const contentParts = modelResponse.content ?? [];
     for (const part of contentParts) {
         if (part.type === 'tool-error') {
-            const meta = toolExecutionMeta?.get(part.toolName);
+            const meta = toolExecutionMeta?.get(part.toolCallId) ?? toolExecutionMeta?.get(part.toolName);
             // Only add if not already tracked via toolResults
             const alreadyTracked = toolResults.some(r => r.toolCallId === part.toolCallId);
             if (!alreadyTracked) {
@@ -396,7 +408,7 @@ async function executeSingleStep(agent, state, contextWrapper, modelResponse, to
             if (msg.role === 'tool' && Array.isArray(msg.content)) {
                 for (const part of msg.content) {
                     if (part.type === 'tool-result') {
-                        const resultContent = JSON.stringify(part.output);
+                        const resultContent = safeStringify(part.output);
                         const estimatedTokens = await tokenBudget.estimateTokens(resultContent);
                         if (tokenBudget.hasReachedLimit || !tokenBudget.canAddMessage(estimatedTokens)) {
                             tokenBudget.markLimitReached();
