@@ -73,6 +73,9 @@ export declare function determineNextStep<TContext = unknown>(agent: Agent<TCont
  * @param modelResponse Response from generateText
  * @returns Single step result with next step decision
  */
-export declare function executeSingleStep<TContext = unknown>(agent: Agent<TContext, unknown>, state: RunState<TContext, Agent<TContext, unknown>>, contextWrapper: RunContextWrapper<TContext>, modelResponse: GenerateTextResult<ToolSet, unknown>): Promise<SingleStepResult>;
+export declare function executeSingleStep<TContext = unknown>(agent: Agent<TContext, unknown>, state: RunState<TContext, Agent<TContext, unknown>>, contextWrapper: RunContextWrapper<TContext>, modelResponse: GenerateTextResult<ToolSet, unknown>, toolExecutionMeta?: Map<string, {
+    duration: number;
+    error?: Error;
+}>): Promise<SingleStepResult>;
 export {};
 //# sourceMappingURL=execution.d.ts.map
