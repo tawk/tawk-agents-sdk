@@ -5,6 +5,18 @@ All notable changes to the Tawk Agents SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-03-13
+
+### Added
+
+  - Support for `providerOptions` in agent model settings for passing provider-specific configuration
+  - Image token estimation via `imageTokenizerFn` (default: 2840 tokens per image)
+
+### Fixed
+
+  - Tool results not being included in conversation history
+  - Tool execution now properly receives agent context and Langfuse tracing
+
 ## [2.0.0] - 2026-01-27
 
 ### Added
