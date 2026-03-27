@@ -575,12 +575,22 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           };
         }
 
+        // Resolve toolChoice (static value or per-turn function)
+        const toolChoiceSetting = state.currentAgent._modelSettings?.toolChoice;
+        let resolvedToolChoice: 'auto' | 'required' | 'none' | undefined;
+        if (typeof toolChoiceSetting === 'function') {
+          resolvedToolChoice = toolChoiceSetting(state.currentTurn);
+        } else {
+          resolvedToolChoice = toolChoiceSetting;
+        }
+
         // Call model — AI SDK will auto-execute tools via our wrapped execute functions
         const modelResponse = await generateText({
           model: model as LanguageModel,
           system: systemMessage,
           messages: state.messages,
           tools: wrappedTools as any,
+          ...(resolvedToolChoice ? { toolChoice: resolvedToolChoice } : {}),
           temperature: state.currentAgent._modelSettings?.temperature,
           topP: state.currentAgent._modelSettings?.topP,
           maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,

@@ -428,12 +428,22 @@ class AgenticRunner extends lifecycle_1.RunHooks {
                         },
                     };
                 }
+                // Resolve toolChoice (static value or per-turn function)
+                const toolChoiceSetting = state.currentAgent._modelSettings?.toolChoice;
+                let resolvedToolChoice;
+                if (typeof toolChoiceSetting === 'function') {
+                    resolvedToolChoice = toolChoiceSetting(state.currentTurn);
+                }
+                else {
+                    resolvedToolChoice = toolChoiceSetting;
+                }
                 // Call model — AI SDK will auto-execute tools via our wrapped execute functions
                 const modelResponse = await (0, ai_1.generateText)({
                     model: model,
                     system: systemMessage,
                     messages: state.messages,
                     tools: wrappedTools,
+                    ...(resolvedToolChoice ? { toolChoice: resolvedToolChoice } : {}),
                     temperature: state.currentAgent._modelSettings?.temperature,
                     topP: state.currentAgent._modelSettings?.topP,
                     maxOutputTokens: state.currentAgent._modelSettings?.responseTokens,

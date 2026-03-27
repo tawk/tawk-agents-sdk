@@ -261,6 +261,7 @@ export declare class Agent<TContext = any, TOutput = string> extends AgentHooks<
         maxTokens?: number;
         presencePenalty?: number;
         frequencyPenalty?: number;
+        toolChoice?: "auto" | "required" | "none" | ((turn: number) => "auto" | "required" | "none");
         providerOptions?: Record<string, Record<string, unknown>>;
     } | undefined;
     get _tokenizerFn(): TokenizerFn;
