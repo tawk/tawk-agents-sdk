@@ -137,24 +137,15 @@ const result = await run(agent, 'Hello!');
 Test agents interactively with real-time streaming, tool visualization, and multi-agent transfers:
 
 ```bash
-npm run cli                                          # Default (openai:gpt-4o-mini)
-npm run cli -- --model groq:llama-3.3-70b-versatile  # Groq
-npm run cli -- --agent coder --verbose               # Coder preset
+npm run cli                                          # Interactive model picker
+npm run cli -- --model openai:gpt-4o-mini            # Specific model
+npm run cli -- --agent coder --verbose               # Coder preset, verbose
+npm run cli -- -m anthropic:claude-sonnet-4-5 --system-prompt "You are a pirate"
 ```
 
-```
-  TAWK Agents SDK  v3.0.0 CLI
+4 agent presets (`default`, `minimal`, `coder`, `researcher`), 10 built-in tools, MCP integration, slash commands, multi-line input, and more.
 
-  Model:    groq:llama-3.3-70b-versatile
-  Agent:    Assistant (10 tools)
-  Session:  a1b2c3d4
-
-Assistant > what time is it?
-
-Agent: Assistant ────────────────────────────────────────
-  ⚡ Tool  current_time
-  ✓ Result {"iso":"2026-02-20T06:22:46Z","timezone":"Asia/Kuala_Lumpur"}
-The current time is 2:22 PM on February 20, 2026.
+**[Full CLI Guide](docs/guides/CLI.md)** | **[Test Queries](tests/cli-test-queries.md)**
 
   Tokens  in: 2,303  out: 30  total: 2,333  |  Tools: 1  |  Duration: 1.9s
 ```

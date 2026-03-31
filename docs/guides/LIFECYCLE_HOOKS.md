@@ -429,6 +429,7 @@ class RunHooks<TContext, TOutput> extends EventEmitter {
 
 ## Related Documentation
 
+- [CLI Guide](./CLI.md) - Test hooks interactively
 - [Core Concepts](./CORE_CONCEPTS.md) - Understanding agents
 - [Features Guide](./FEATURES.md) - All SDK features
 - [API Reference](../reference/API.md) - Complete API documentation

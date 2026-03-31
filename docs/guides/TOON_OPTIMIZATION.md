@@ -370,6 +370,7 @@ console.log('Performance:', result.metadata);
 
 ## Related Documentation
 
+- [CLI Guide](./CLI.md) - Test TOON optimization interactively
 - [Performance Guide](../reference/PERFORMANCE.md) - General optimization strategies
 - [Features Guide](./FEATURES.md) - All SDK features
 - [API Reference](../reference/API.md) - Complete API documentation

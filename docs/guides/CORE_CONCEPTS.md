@@ -572,7 +572,8 @@ agent.on('agent_end', (context, output) => {
 Now that you understand the core concepts:
 
 1. **Practice**: Try the [Getting Started Guide](../getting-started/GETTING_STARTED.md)
-2. **Explore**: Read the [Features Guide](./FEATURES.md)
+2. **Test interactively**: Use the [CLI Guide](./CLI.md) to explore features live
+3. **Explore**: Read the [Features Guide](./FEATURES.md)
 3. **Deep Dive**: Study the [Architecture](../reference/COMPLETE_ARCHITECTURE.md)
 4. **Build**: Check out [Examples](../../examples)
 
@@ -580,6 +581,7 @@ Now that you understand the core concepts:
 
 ## 🔗 Related Documentation
 
+- [CLI Guide](./CLI.md) - Interactive testing CLI
 - [Features Guide](./FEATURES.md) - All features in detail
 - [Architecture](../reference/COMPLETE_ARCHITECTURE.md) - Technical deep dive
 - [API Reference](../reference/API.md) - Complete API docs

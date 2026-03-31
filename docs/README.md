@@ -33,7 +33,7 @@ console.log(result.finalOutput);
 | I want to... | Start here | Time |
 |-------------|------------|------|
 | **Get started quickly** | [Getting Started](./getting-started/GETTING_STARTED.md) | 15 min |
-| **Test agents interactively** | [Interactive CLI](#interactive-cli) | 5 min |
+| **Test agents interactively** | [CLI Guide](./guides/CLI.md) | 5 min |
 | **Understand the system** | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md) | 30 min |
 | **Learn all features** | [Features Guide](./guides/FEATURES.md) | 30 min |
 | **See the architecture** | [Complete Architecture](./reference/COMPLETE_ARCHITECTURE.md) | 60 min |
@@ -47,14 +47,14 @@ console.log(result.finalOutput);
 Test agents interactively with real-time streaming, tool visualization, and multi-agent transfers:
 
 ```bash
-npm run cli                                          # Default (openai:gpt-4o-mini)
-npm run cli -- --model groq:llama-3.3-70b-versatile  # Groq
+npm run cli                                          # Interactive model picker
+npm run cli -- --model openai:gpt-4o-mini            # Specific model
 npm run cli -- --agent coder --verbose               # Coder preset
 ```
 
-**Agent presets:** `default` (10 tools), `researcher`, `coder`, `multi-research` (multi-agent with transfers)
+4 agent presets, 10 built-in tools, MCP integration, permission system, slash commands, multi-line input, and multi-provider support.
 
-**Slash commands:** `/help`, `/agent <name>`, `/tools`, `/model <p:id>`, `/session`, `/history`, `/usage`, `/verbose`, `/clear`, `/quit`
+**[Full CLI Guide](./guides/CLI.md)** — flags, commands, tools, config, MCP, troubleshooting
 
 ---
 
@@ -127,6 +127,7 @@ npm run cli -- --agent coder --verbose               # Coder preset
 - **[Error Handling](./guides/ERROR_HANDLING.md)** `15 min` - Error patterns, recovery
 - **[Lifecycle Hooks](./guides/LIFECYCLE_HOOKS.md)** `15 min` - Event system
 - **[TOON Optimization](./guides/TOON_OPTIMIZATION.md)** `15 min` - Token reduction
+- **[CLI Guide](./guides/CLI.md)** `10 min` - Interactive testing CLI
 
 ---
 
@@ -204,7 +205,7 @@ tawk-agents-sdk/
 | **Tools** | Parallel execution, safe wrapper | [Features](./guides/FEATURES.md#tools) |
 | **Guardrails** | Input/output validation, 9 built-in types | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md#4-guardrails-validation-flow) |
 | **Tracing** | Complete Langfuse observability | [Tracing Guide](./guides/TRACING.md) |
-| **CLI** | Interactive REPL for testing | [Interactive CLI](#interactive-cli) |
+| **CLI** | Interactive REPL for testing | [CLI Guide](./guides/CLI.md) |
 
 ### Advanced Features
 

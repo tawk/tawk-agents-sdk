@@ -312,6 +312,7 @@ const agent = new Agent({
 
 ## Next Steps
 
+- [CLI Guide](./CLI.md) - Test features interactively
 - [API Reference](../reference/API.md) - Complete API documentation
 - [Architecture](../reference/COMPLETE_ARCHITECTURE.md) - System design details
 - [Performance](../reference/PERFORMANCE.md) - Optimization strategies

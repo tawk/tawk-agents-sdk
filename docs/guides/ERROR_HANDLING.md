@@ -403,6 +403,7 @@ class HandoffError extends Error {
 
 ## Related Documentation
 
+- [CLI Guide](./CLI.md) - Test error handling interactively
 - [Core Concepts](./CORE_CONCEPTS.md) - Understanding agents
 - [Features Guide](./FEATURES.md) - All SDK features
 - [API Reference](../reference/API.md) - Complete API documentation

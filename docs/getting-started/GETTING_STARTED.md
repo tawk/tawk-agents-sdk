@@ -145,6 +145,7 @@ const result = await stream.completed;
 
 ## Next Steps
 
+- **[CLI Guide](../guides/CLI.md)** - Test agents interactively with the built-in CLI
 - **[Core Concepts](../guides/CORE_CONCEPTS.md)** - Learn about agents, tools, sessions, and more
 - **[Features Guide](../guides/FEATURES.md)** - Explore all available features
 - **[API Reference](../reference/API.md)** - Complete API documentation

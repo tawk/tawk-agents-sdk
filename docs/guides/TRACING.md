@@ -289,6 +289,7 @@ await withTrace('Complete Workflow', async (trace) => {
 
 ## Related Documentation
 
+- [CLI Guide](./CLI.md) - Test tracing interactively with verbose mode
 - [Features Guide](./FEATURES.md) - All SDK features
 - [API Reference](../reference/API.md) - Complete API documentation
 - [Lifecycle Hooks](./LIFECYCLE_HOOKS.md) - Event-driven workflows

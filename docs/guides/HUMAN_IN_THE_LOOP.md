@@ -40,5 +40,6 @@ await run(agent, 'Delete temp.txt');
 
 ## Related Documentation
 
+- [CLI Guide](./CLI.md) - Test HITL patterns with the permission system
 - [Core Concepts](./CORE_CONCEPTS.md) - Understanding agents and tools
 - [Features Guide](./FEATURES.md) - All SDK features
