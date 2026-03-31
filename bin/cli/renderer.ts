@@ -1,14 +1,19 @@
 /**
  * Stream event renderer for tawk-cli
  *
- * Maps StreamEvent types to colored terminal output with inline spinner.
+ * Claude Code-style inline transcript rendering:
+ * - Responses stream inline as flowing text
+ * - Tool calls shown as compact "⎿ ToolName(args)" lines
+ * - Subagent flow: agent headers, transfers, indented nesting
+ * - Spinner on stderr (doesn't interfere with readline)
+ * - No bordered panels — clean scrolling transcript
  */
 
 import pc from 'picocolors';
 import type { StreamEvent } from '../../src';
 
 // ============================================
-// INLINE SPINNER (zero-dependency)
+// SPINNER (stderr-only, readline-safe)
 // ============================================
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -30,7 +35,6 @@ class Spinner {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
-      // Clear the spinner line
       process.stderr.write('\r\x1b[K');
     }
   }
@@ -41,9 +45,23 @@ class Spinner {
 
   private render(): void {
     const frame = SPINNER_FRAMES[this.frameIndex % SPINNER_FRAMES.length];
-    process.stderr.write(`\r\x1b[K${pc.yellow(frame)} ${pc.dim(this.message)}`);
+    process.stderr.write(`\r\x1b[K${pc.cyan(frame)} ${pc.dim(this.message)}`);
     this.frameIndex++;
   }
+}
+
+// ============================================
+// USAGE META
+// ============================================
+
+export interface UsageMeta {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  toolCalls: number;
+  duration: number;
+  cost: number;
+  handoffChain?: string[];
 }
 
 // ============================================
@@ -56,8 +74,17 @@ export class StreamRenderer {
   private verbose: boolean;
   private toolStartTimes = new Map<string, number>();
 
+  // Subagent tracking
+  private currentAgent: string | null = null;
+  private agentCount = 0;
+  private isFirstAgent = true;
+
   constructor(verbose = false) {
     this.verbose = verbose;
+  }
+
+  async init(): Promise<void> {
+    // No-op — kept for API compatibility.
   }
 
   setVerbose(verbose: boolean): void {
@@ -65,15 +92,30 @@ export class StreamRenderer {
   }
 
   /**
-   * Render a stream event to the terminal
+   * Render a stream event to the terminal (Claude Code-style inline transcript)
    */
   render(event: StreamEvent): void {
     switch (event.type) {
       case 'agent-start':
         this.endTextStream();
-        process.stdout.write(
-          '\n' + pc.cyan(pc.bold(`Agent: ${event.agentName}`)) + ' ' + pc.dim('─'.repeat(40)) + '\n'
-        );
+        this.spinner.stop();
+        this.agentCount++;
+
+        if (this.isFirstAgent) {
+          // First agent — just show a newline + spinner, no header needed
+          this.isFirstAgent = false;
+          this.currentAgent = event.agentName;
+          process.stdout.write('\n');
+        } else {
+          // Subsequent agent after transfer — show agent header
+          this.currentAgent = event.agentName;
+          process.stdout.write(
+            '\n' +
+            pc.dim('  ⎿ ') + pc.bold(pc.blue('Agent: ')) + pc.bold(event.agentName) +
+            '\n'
+          );
+        }
+        this.spinner.start('Thinking...');
         break;
 
       case 'text-delta':
@@ -89,14 +131,15 @@ export class StreamRenderer {
         this.spinner.stop();
         this.toolStartTimes.set(event.toolCallId, Date.now());
         {
-          const argsStr = truncate(formatArgs(event.args), getTermWidth() - 30);
+          const argsStr = formatArgsCompact(event.args);
           process.stdout.write(
-            pc.yellow(`  ⚡ Tool  ${event.toolName}`) +
-            (argsStr ? ' ' + pc.dim(argsStr) : '') +
+            pc.dim('  ⎿ ') +
+            pc.cyan(event.toolName) +
+            (argsStr ? pc.dim('(' + argsStr + ')') : '') +
             '\n'
           );
         }
-        this.spinner.start(`Executing ${event.toolName}...`);
+        this.spinner.start(`Running ${event.toolName}...`);
         break;
 
       case 'tool-result':
@@ -106,22 +149,26 @@ export class StreamRenderer {
           const duration = startTime ? Date.now() - startTime : 0;
           this.toolStartTimes.delete(event.toolCallId);
 
-          const preview = truncate(formatResult(event.result), 200);
+          const preview = truncate(formatResult(event.result), getTermWidth() - 12);
           process.stdout.write(
-            pc.green(`  ✓ Result`) +
-            ' ' + pc.dim(preview) +
-            (duration ? ' ' + pc.dim(`(${formatDuration(duration)})`) : '') +
+            pc.dim('    ') +
+            pc.dim(preview) +
+            (duration ? pc.dim(` (${formatDuration(duration)})`) : '') +
             '\n'
           );
         }
+        this.spinner.start('Thinking...');
         break;
 
       case 'transfer':
         this.endTextStream();
         this.spinner.stop();
         process.stdout.write(
-          pc.magenta(pc.bold(`  ↗ Transfer  ${event.from} → ${event.to}`)) +
-          (event.reason ? ' ' + pc.dim(event.reason) : '') +
+          '\n' +
+          pc.dim('  ⎿ ') +
+          pc.magenta('Transfer') +
+          pc.dim(' → ') + pc.bold(event.to) +
+          (event.reason ? pc.dim(' (' + event.reason + ')') : '') +
           '\n'
         );
         break;
@@ -129,24 +176,22 @@ export class StreamRenderer {
       case 'step-start':
         if (this.verbose) {
           this.endTextStream();
-          process.stdout.write(pc.dim(`--- Step ${event.stepNumber} ---`) + '\n');
+          process.stdout.write(pc.dim(`  ── step ${event.stepNumber} ──`) + '\n');
         }
         break;
 
       case 'step-complete':
         if (this.verbose) {
           this.endTextStream();
-          process.stdout.write(pc.dim(`--- Step ${event.stepNumber} complete ---`) + '\n');
+          process.stdout.write(pc.dim(`  ── step ${event.stepNumber} done ──`) + '\n');
         }
         break;
 
       case 'guardrail-check':
         if (this.verbose) {
           this.endTextStream();
-          const status = event.passed ? pc.green('✓') : pc.red('✗');
-          process.stdout.write(
-            pc.dim(`  Guardrail: ${event.guardrailName} ${status}`) + '\n'
-          );
+          const icon = event.passed ? pc.green('✓') : pc.red('✗');
+          process.stdout.write(pc.dim(`  ${icon} guardrail: ${event.guardrailName}`) + '\n');
         }
         break;
 
@@ -157,38 +202,49 @@ export class StreamRenderer {
       case 'finish':
         this.endTextStream();
         this.spinner.stop();
+        // Reset agent tracking for next turn
+        this.currentAgent = null;
+        this.agentCount = 0;
+        this.isFirstAgent = true;
         break;
     }
   }
 
   /**
-   * Display usage summary after a turn
+   * Display usage/cost as a compact dim line (Claude Code style)
+   * Includes handoff chain when multi-agent transfers occurred.
    */
-  renderUsage(meta: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    toolCalls: number;
-    duration: number;
-    cost: number;
-  }): void {
+  renderUsage(meta: UsageMeta): void {
     this.endTextStream();
-    process.stdout.write(
-      '\n' +
-      pc.dim(
-        `  Tokens  in: ${fmt(meta.inputTokens)}  out: ${fmt(meta.outputTokens)}` +
-        `  total: ${fmt(meta.totalTokens)}` +
-        `  |  Tools: ${meta.toolCalls}` +
-        `  |  Duration: ${formatDuration(meta.duration)}` +
-        `  |  Cost: ~$${meta.cost.toFixed(4)}`
-      ) +
-      '\n'
-    );
+    const parts = [
+      `${fmt(meta.totalTokens)} tokens`,
+      `${formatDuration(meta.duration)}`,
+      `~$${meta.cost.toFixed(4)}`,
+    ];
+    if (meta.toolCalls > 0) {
+      parts.splice(1, 0, `${meta.toolCalls} tool${meta.toolCalls === 1 ? '' : 's'}`);
+    }
+    // Show agent count if multi-agent
+    if (meta.handoffChain && meta.handoffChain.length > 1) {
+      parts.splice(1, 0, `${meta.handoffChain.length} agents`);
+    }
+
+    process.stdout.write('\n' + pc.dim('  ' + parts.join(' · ')) + '\n');
+
+    // Show handoff chain
+    if (meta.handoffChain && meta.handoffChain.length > 1) {
+      process.stdout.write(
+        pc.dim('  Agents: ') +
+        meta.handoffChain.map((a, i) =>
+          i < meta.handoffChain!.length - 1
+            ? pc.dim(a + ' → ')
+            : pc.bold(a)
+        ).join('') +
+        '\n'
+      );
+    }
   }
 
-  /**
-   * End current text stream with a newline if needed
-   */
   endTextStream(): void {
     if (this.inTextStream) {
       process.stdout.write('\n');
@@ -200,19 +256,37 @@ export class StreamRenderer {
     this.spinner.stop();
     this.endTextStream();
   }
+
+  pauseSpinner(): void {
+    this.spinner.stop();
+  }
+
+  resumeSpinner(msg: string): void {
+    this.spinner.start(msg);
+  }
 }
 
 // ============================================
 // HELPERS
 // ============================================
 
-function formatArgs(args: any): string {
+/** Format tool args as a compact string like "path=src/index.ts" or "command=ls -la" */
+function formatArgsCompact(args: any): string {
   if (!args) return '';
   try {
-    const str = JSON.stringify(args);
-    return str === '{}' ? '' : str;
+    const entries = Object.entries(args);
+    if (entries.length === 0) return '';
+    if (entries.length === 1) {
+      const [, val] = entries[0];
+      const s = typeof val === 'string' ? val : JSON.stringify(val);
+      return truncate(s, 60);
+    }
+    return truncate(
+      entries.map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', '),
+      80
+    );
   } catch {
-    return String(args);
+    return '';
   }
 }
 
@@ -227,10 +301,9 @@ function formatResult(result: any): string {
 }
 
 function truncate(str: string, maxLen: number): string {
-  // Replace newlines for display
   const clean = str.replace(/\n/g, '↵');
   if (clean.length <= maxLen) return clean;
-  return clean.slice(0, maxLen - 3) + '...';
+  return clean.slice(0, maxLen - 1) + '…';
 }
 
 function fmt(n: number): string {
