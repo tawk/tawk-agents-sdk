@@ -7,10 +7,14 @@
 import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { tool, safeFetchText } from '../../src';
 import type { CoreTool } from '../../src';
+
+/** Tools that require user confirmation before execution */
+export const DANGEROUS_TOOLS = new Set(['shell_exec', 'write_file']);
 
 // ============================================
 // PATH SAFETY
@@ -272,3 +276,83 @@ export function getToolDescriptions(): { name: string; description: string }[] {
 
 // Export for testing
 export { resolveSafePath };
+
+// ============================================
+// PERMISSION WRAPPER
+// ============================================
+
+/** Module-level mutex for serializing permission prompts (prevents concurrent stdin races) */
+let confirmLock: Promise<void> = Promise.resolve();
+
+/**
+ * Readline-safe confirm prompt.
+ * Creates a temporary readline interface on a separate fd so it
+ * doesn't conflict with the main REPL readline.
+ */
+function askConfirm(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stderr, // Write prompt to stderr to avoid mixing with stdout
+      terminal: true,
+    });
+    rl.question(question, (answer: string) => {
+      rl.close();
+      const a = answer.trim().toLowerCase();
+      resolve(a === 'y' || a === 'yes' || a === '');
+    });
+  });
+}
+
+/**
+ * Wrap a tool with a permission confirmation prompt.
+ * Uses a mutex to serialize concurrent confirms (SDK batches 3 tool calls in parallel).
+ */
+export function wrapWithPermission(
+  toolDef: CoreTool,
+  toolName: string,
+  opts: {
+    pauseSpinner: () => void;
+    resumeSpinner: (msg: string) => void;
+    shouldConfirm: () => boolean;
+  }
+): CoreTool {
+  const originalExecute = toolDef.execute;
+  if (!originalExecute) return toolDef;
+
+  return {
+    ...toolDef,
+    execute: async (args: any, options: any) => {
+      if (!opts.shouldConfirm()) {
+        return originalExecute(args, options);
+      }
+
+      // Serialize confirms via mutex
+      let resolve: () => void;
+      const prevLock = confirmLock;
+      confirmLock = new Promise<void>((r) => { resolve = r; });
+
+      try {
+        await prevLock;
+
+        opts.pauseSpinner();
+        const argsPreview = JSON.stringify(args).slice(0, 80);
+        const pc = (await import('picocolors')).default;
+        process.stderr.write('\n');
+        const confirmed = await askConfirm(
+          pc.yellow('⚠') + ` Allow ${pc.bold(toolName)}? ${pc.dim(argsPreview)} ${pc.dim('[Y/n]')} `
+        );
+
+        if (!confirmed) {
+          opts.resumeSpinner('Thinking...');
+          return { error: `User denied permission for ${toolName}` };
+        }
+
+        opts.resumeSpinner(`Executing ${toolName}...`);
+        return originalExecute(args, options);
+      } finally {
+        resolve!();
+      }
+    },
+  } as CoreTool;
+}
