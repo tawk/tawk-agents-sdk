@@ -8,10 +8,9 @@
  * Note: Vision capabilities are accessed through agents with image content in messages.
  */
 
-import { 
+import {
   Agent,
   run,
-  setDefaultModel,
 } from '../../src';
 import { openai } from '@ai-sdk/openai';
 
@@ -113,9 +112,7 @@ async function visionStructured() {
 async function main() {
   console.log('🚀 Vision Examples\n');
   console.log('='.repeat(50) + '\n');
-  
-  setDefaultModel(openai('gpt-4o-mini'));
-  
+
   try {
     console.log('Note: Vision examples require actual image URLs\n');
     // Uncomment when you have real image URLs:

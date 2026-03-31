@@ -1,17 +1,13 @@
 /**
  * REAL Multi-Agent Coordination Demo
- * 
+ *
  * This demonstrates actual agent-to-agent coordination with back-and-forth communication
  */
 
-import { Agent, run, setDefaultModel } from '../src/index';
+import { Agent, run, tool } from '../../src';
 import { openai } from '@ai-sdk/openai';
-import { tool } from 'ai';
 import { z } from 'zod';
-import { MemorySession } from '../src/sessions';
 import 'dotenv/config';
-
-setDefaultModel(openai('gpt-4o-mini'));
 
 // ============================================
 // DATA COLLECTOR AGENT - Gathers data
@@ -19,7 +15,8 @@ setDefaultModel(openai('gpt-4o-mini'));
 
 const dataCollectorAgent = new Agent({
   name: 'DataCollector',
-  instructions: `You are a data collection agent. 
+  model: openai('gpt-4o-mini'),
+  instructions: `You are a data collection agent.
 
 When given a topic:
 1. Use the gatherData tool to collect information
@@ -27,7 +24,7 @@ When given a topic:
 3. Use transfer_to_analyst to transfer the data to the Analyst
 
 Be thorough and systematic.`,
-  
+
   tools: {
     gatherData: tool({
       description: 'Gather data about a topic',
@@ -50,11 +47,12 @@ Be thorough and systematic.`,
 });
 
 // ============================================
-// ANALYST AGENT - Analyzes data  
+// ANALYST AGENT - Analyzes data
 // ============================================
 
 const analystAgent = new Agent({
   name: 'Analyst',
+  model: openai('gpt-4o-mini'),
   instructions: `You are an analytical agent.
 
 When you receive data:
@@ -63,7 +61,7 @@ When you receive data:
 3. Use transfer_to_writer to send analysis to the Writer
 
 Be insightful and thorough.`,
-  
+
   tools: {
     analyzeData: tool({
       description: 'Analyze collected data',
@@ -90,6 +88,7 @@ Be insightful and thorough.`,
 
 const writerAgent = new Agent({
   name: 'Writer',
+  model: openai('gpt-4o-mini'),
   instructions: `You are a content writer agent.
 
 When you receive analysis:
@@ -98,7 +97,7 @@ When you receive analysis:
 3. Use transfer_to_reviewer to send for review
 
 Write clearly and engagingly.`,
-  
+
   tools: {
     createReport: tool({
       description: 'Create a report from analysis',
@@ -144,6 +143,7 @@ The market shows strong fundamentals with continued growth expected.
 
 const reviewerAgent = new Agent({
   name: 'Reviewer',
+  model: openai('gpt-4o-mini'),
   instructions: `You are a quality reviewer agent.
 
 When you receive a report:
@@ -152,7 +152,7 @@ When you receive a report:
 3. If quality score >= 80: approve and return the final report
 
 Be constructive and quality-focused.`,
-  
+
   tools: {
     reviewReport: tool({
       description: 'Review report quality',
@@ -163,7 +163,7 @@ Be constructive and quality-focused.`,
         return {
           qualityScore: score,
           approved: score >= 80,
-          feedback: score >= 80 
+          feedback: score >= 80
             ? 'Excellent work! Report is well-structured and comprehensive.'
             : 'Needs more detail in the methodology section.',
           strengths: ['Clear structure', 'Good insights', 'Professional tone'],
@@ -180,6 +180,7 @@ Be constructive and quality-focused.`,
 
 const coordinatorAgent = new Agent({
   name: 'Coordinator',
+  model: openai('gpt-4o-mini'),
   instructions: `You are the workflow coordinator.
 
 When you receive a request:
@@ -220,14 +221,11 @@ async function testRealCoordination() {
   console.log('🔄 Agent Flow:');
   console.log('   Coordinator → DataCollector → Analyst → Writer → Reviewer → Coordinator\n');
   console.log('═══════════════════════════════════════════════════════════\n');
-  
-  const session = new MemorySession('coordination-demo');
-  
+
   const result = await run(
     coordinatorAgent,
     'Create a comprehensive market analysis report on AI agents, including growth data, key players, and trends',
     {
-      session,
       maxTurns: 25,
       context: {
         reportType: 'market-analysis',
@@ -235,37 +233,37 @@ async function testRealCoordination() {
       }
     }
   );
-  
+
   console.log('\n\n📊 COORDINATION SUMMARY');
   console.log('═══════════════════════════════════════════════════════════\n');
-  
+
   console.log('🔄 Agent Transfer Chain:');
   if (result.metadata.handoffChain && result.metadata.handoffChain.length > 0) {
     console.log('   ' + result.metadata.handoffChain.join(' → '));
   } else {
     console.log('   Coordinator (no transfers)');
   }
-  
+
   console.log('\n🤖 Agents Participated:', result.metadata.agentMetrics?.length || 1);
   result.metadata.agentMetrics?.forEach(metric => {
-    console.log(`   • ${metric.agentName}: ${metric.turns} turn(s), ${metric.totalTokens || 0} tokens`);
+    console.log(`   • ${metric.agentName}: ${metric.turns} turn(s), ${metric.tokens?.total ?? 0} tokens`);
   });
-  
+
   console.log('\n🔧 Tools Executed:', result.metadata.totalToolCalls);
   console.log('💰 Total Tokens:', result.metadata.totalTokens);
   console.log('⏱️  Total Turns:', result.steps.length);
-  
+
   console.log('\n📝 Final Output:');
   console.log('─────────────────────────────────────────────────────────');
-  const output = typeof result.finalOutput === 'string' 
-    ? result.finalOutput 
+  const output = typeof result.finalOutput === 'string'
+    ? result.finalOutput
     : JSON.stringify(result.finalOutput, null, 2);
   console.log(output.substring(0, 800));
   if (output.length > 800) console.log('... (truncated)');
   console.log('─────────────────────────────────────────────────────────');
-  
+
   console.log('\n✅ Coordination test completed!\n');
-  
+
   return result;
 }
 
@@ -278,4 +276,3 @@ if (require.main === module) {
 }
 
 export { testRealCoordination };
-

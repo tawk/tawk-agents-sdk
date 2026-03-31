@@ -23,12 +23,11 @@ examples/
 │   ├── 07-tracing.ts
 │   └── 08-langfuse-tracing.ts
 │
-├── 03-advanced/                     # 6 advanced examples (09-14)
+├── 03-advanced/                     # 5 advanced examples (09-14)
 │   ├── 09-embeddings-rag.ts
 │   ├── 10-vision.ts
 │   ├── 11-toon-format.ts
 │   ├── 12-mcp-integration.ts
-│   ├── 13-dynamic-approvals.ts
 │   └── 14-multi-agent-research.ts
 │
 ├── 04-production/                   # 2 production examples (15-16)

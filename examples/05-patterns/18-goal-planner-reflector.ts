@@ -1,19 +1,16 @@
 /**
  * Goal / Planner / Reflector as AGENTS
- * 
+ *
  * This shows how the "True Agentic Architecture" patterns can be
  * implemented as specialized agents using our existing transfer system.
- * 
+ *
  * No need for separate systems - just agents transferring to each other!
  */
 
-import { Agent, run, setDefaultModel } from '../src/index';
+import { Agent, run } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { MemorySession } from '../src/sessions';
 import 'dotenv/config';
-// Set default model
-setDefaultModel(openai('gpt-4o-mini'));
 
 // ============================================
 // 1. GOAL AGENT - Tracks and manages goals
@@ -21,6 +18,7 @@ setDefaultModel(openai('gpt-4o-mini'));
 
 const goalAgent = new Agent({
   name: 'GoalManager',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a goal management agent.
 
@@ -34,22 +32,23 @@ When you receive a request:
 1. Extract the main goal(s)
 2. Break down complex goals into sub-goals
 3. Assign priorities
-4. Store in session metadata
-5. Transfer to the Planner to create execution plan
+4. Transfer to the Planner to create execution plan
 
 Always return structured goal information.
   `,
-  outputSchema: z.object({
-    goals: z.array(z.object({
-      id: z.string(),
-      description: z.string(),
-      status: z.enum(['pending', 'in_progress', 'completed', 'blocked']),
-      priority: z.number().min(1).max(10),
-      subgoals: z.array(z.string()).optional()
-    })),
-    nextAction: z.string()
-  }),
-  
+  output: {
+    schema: z.object({
+      goals: z.array(z.object({
+        id: z.string(),
+        description: z.string(),
+        status: z.enum(['pending', 'in_progress', 'completed', 'blocked']),
+        priority: z.number().min(1).max(10),
+        subgoals: z.array(z.string()).optional()
+      })),
+      nextAction: z.string()
+    })
+  },
+
   // Transfer to Planner when goals are identified
   subagents: [] // Will be set below
 });
@@ -60,6 +59,7 @@ Always return structured goal information.
 
 const plannerAgent = new Agent({
   name: 'Planner',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a strategic planning agent.
 
@@ -78,19 +78,21 @@ When you receive goals:
 
 Always return a structured execution plan.
   `,
-  outputSchema: z.object({
-    plan: z.array(z.object({
-      step: z.number(),
-      action: z.string(),
-      agent: z.string().optional(),
-      tool: z.string().optional(),
-      dependencies: z.array(z.number()).optional(),
-      estimatedCost: z.number().optional()
-    })),
-    reasoning: z.string(),
-    readyToExecute: z.boolean()
-  }),
-  
+  output: {
+    schema: z.object({
+      plan: z.array(z.object({
+        step: z.number(),
+        action: z.string(),
+        agent: z.string().optional(),
+        tool: z.string().optional(),
+        dependencies: z.array(z.number()).optional(),
+        estimatedCost: z.number().optional()
+      })),
+      reasoning: z.string(),
+      readyToExecute: z.boolean()
+    })
+  },
+
   subagents: [] // Will be set below
 });
 
@@ -100,6 +102,7 @@ Always return a structured execution plan.
 
 const executorAgent = new Agent({
   name: 'Executor',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a task execution agent.
 
@@ -138,7 +141,7 @@ Always provide detailed execution results.
       }
     }
   },
-  
+
   subagents: [] // Will be set below
 });
 
@@ -148,6 +151,7 @@ Always provide detailed execution results.
 
 const reflectorAgent = new Agent({
   name: 'Reflector',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a reflection and evaluation agent.
 
@@ -167,18 +171,20 @@ When you receive execution results:
 
 Always provide honest, constructive evaluation.
   `,
-  outputSchema: z.object({
-    evaluation: z.object({
-      success: z.boolean(),
-      goalsAchieved: z.array(z.string()),
-      goalsRemaining: z.array(z.string()),
-      reasoning: z.string()
-    }),
-    corrections: z.array(z.string()).optional(),
-    nextAction: z.enum(['complete', 'retry', 'replan', 'continue']),
-    finalAnswer: z.string().optional()
-  }),
-  
+  output: {
+    schema: z.object({
+      evaluation: z.object({
+        success: z.boolean(),
+        goalsAchieved: z.array(z.string()),
+        goalsRemaining: z.array(z.string()),
+        reasoning: z.string()
+      }),
+      corrections: z.array(z.string()).optional(),
+      nextAction: z.enum(['complete', 'retry', 'replan', 'continue']),
+      finalAnswer: z.string().optional()
+    })
+  },
+
   subagents: [] // Will be set below
 });
 
@@ -188,6 +194,7 @@ Always provide honest, constructive evaluation.
 
 const mainAgent = new Agent({
   name: 'Orchestrator',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are the main orchestrator agent.
 
@@ -198,12 +205,12 @@ When you receive a user request:
 
 Always transfer on the first turn - don't try to handle requests yourself.
   `,
-  
+
   // Connect all agents via transfers
   subagents: [goalAgent, plannerAgent, executorAgent, reflectorAgent],
-  
+
   transferDescription: 'Main entry point for user requests',
-  
+
   tools: {
     // Add explicit tools for transfers if needed
   }
@@ -220,19 +227,15 @@ reflectorAgent.subagents = [plannerAgent, executorAgent, mainAgent];
 // ============================================
 
 async function example() {
-  // Create session to persist goals, plans, and history
-  const session = new MemorySession('user-123', 50);
-  
   console.log('🚀 Multi-Agent System: Goal → Plan → Execute → Reflect\n');
-  
+
   console.log('🔧 Main Agent Subagents:', mainAgent.subagents.map(a => a.name));
   console.log('🔧 Available Tools:', Object.keys(mainAgent.tools));
   console.log();
-  
-  const result = await run(mainAgent, 
-    'Goal: Research AI agent architectures and create a comparison report', 
-    { 
-      session,
+
+  const result = await run(mainAgent,
+    'Goal: Research AI agent architectures and create a comparison report',
+    {
       context: {
         userId: 'user-123',
         preferences: {
@@ -243,14 +246,14 @@ async function example() {
       maxTurns: 20  // Allow more turns for multi-agent flow
     }
   );
-  
+
   console.log('\n✅ Final Result:', result.finalOutput);
   console.log('\n📊 Agent Path:', result.metadata.handoffChain);
   console.log('🤖 Total Agents:', result.metadata.agentMetrics?.length);
   console.log('💰 Tokens:', result.metadata.totalTokens);
   console.log('\n📝 Agent Metrics:');
   result.metadata.agentMetrics?.forEach(m => {
-    console.log(`  - ${m.agentName}: ${m.turns} turns, ${m.totalTokens} tokens`);
+    console.log(`  - ${m.agentName}: ${m.turns} turns, ${m.tokens?.total ?? 0} tokens`);
   });
 }
 
@@ -264,8 +267,7 @@ async function example() {
 ✅ Context isolation per agent
 ✅ Parallel tool execution built-in
 ✅ End-to-end tracing with Langfuse
-✅ Session memory already available
-✅ Goals/plans stored in session metadata
+✅ Goals/plans stored in context
 ✅ Can add more specialized agents easily
 ✅ Each agent can be tested independently
 ✅ Full observability of the entire flow
@@ -277,44 +279,17 @@ User → Orchestrator → GoalManager → Planner → Executor → Reflector →
                               (Can transfer back for replanning)
 */
 
-// ============================================
-// 8. SESSION METADATA STRUCTURE
-// ============================================
-
-/*
-Session stores:
-{
-  messages: [...],  // Conversation history
-  metadata: {
-    goals: [
-      { id: 'g1', description: '...', status: 'in_progress', priority: 8 }
-    ],
-    currentPlan: [
-      { step: 1, action: '...', status: 'completed' },
-      { step: 2, action: '...', status: 'in_progress' }
-    ],
-    reflections: [
-      { timestamp: 123, evaluation: '...', success: true }
-    ],
-    context: {
-      // User preferences, state, etc.
-    }
-  }
-}
-*/
-
 // Export for testing
-export { 
-  mainAgent, 
-  goalAgent, 
-  plannerAgent, 
-  executorAgent, 
+export {
+  mainAgent,
+  goalAgent,
+  plannerAgent,
+  executorAgent,
   reflectorAgent,
-  example 
+  example
 };
 
 // Run example if called directly
 if (require.main === module) {
   example().catch(console.error);
 }
-

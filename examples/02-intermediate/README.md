@@ -6,8 +6,8 @@ These examples demonstrate intermediate features of the Tawk Agents SDK.
 
 - **05-guardrails.ts** - Safety and validation
 - **06-streaming.ts** - Real-time response streaming
-- **07-tracing.ts** - Observability and debugging (moved from root)
-- **08-error-handling.ts** - Error handling patterns (coming soon)
+- **07-tracing.ts** - Observability and debugging
+- **08-langfuse-tracing.ts** - Langfuse integration for tracing and monitoring
 
 ## Running Examples
 

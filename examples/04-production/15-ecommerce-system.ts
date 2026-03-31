@@ -1,18 +1,15 @@
 /**
  * Complete Examples for tawk AI SDK Agents
- * 
+ *
  * Demonstrates all features with production-ready patterns
  */
 
 import 'dotenv/config';
-import { 
-  Agent, 
-  run, 
-  runStream, 
-  setDefaultModel, 
+import {
+  Agent,
+  run,
+  runStream,
   tool,
-  MemorySession,
-  SessionManager,
   contentSafetyGuardrail,
   piiDetectionGuardrail,
   lengthGuardrail,
@@ -21,19 +18,14 @@ import {
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
-import Redis from 'ioredis';
 
 // ============================================
 // EXAMPLE 1: Basic Agent with Tools
 // ============================================
 
 async function basicAgentExample() {
-  // Set default model
-  setDefaultModel(openai('gpt-4o'));
-
   // Create tools
   const weatherTool = tool({
-    name: 'get_weather',
     description: 'Get weather for a city',
     inputSchema: z.object({
       city: z.string()
@@ -51,6 +43,7 @@ async function basicAgentExample() {
   // Create agent
   const agent = new Agent({
     name: 'Weather Agent',
+    model: openai('gpt-4o'),
     instructions: 'You help with weather queries',
     tools: {
       get_weather: weatherTool
@@ -99,8 +92,6 @@ interface ShoppingContext {
 }
 
 async function contextExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   // Create tools with context
   const addToCartTool = tool({
     description: 'Add item to shopping cart',
@@ -111,7 +102,7 @@ async function contextExample() {
     execute: async ({ productId, quantity }, context: ShoppingContext) => {
       // Access context
       context.cart.push({ productId, quantity });
-      
+
       // Save to database
       await context.db.carts.updateOne(
         { userId: context.userId },
@@ -139,6 +130,7 @@ async function contextExample() {
   // Create agent
   const agent = new Agent<ShoppingContext>({
     name: 'Shopping Agent',
+    model: openai('gpt-4o'),
     instructions: 'You help with online shopping',
     tools: {
       add_to_cart: addToCartTool,
@@ -159,38 +151,26 @@ async function contextExample() {
 }
 
 // ============================================
-// EXAMPLE 4: Sessions (Conversation History)
+// EXAMPLE 4: Multi-turn Conversation
 // ============================================
 
-async function sessionExample() {
-  setDefaultModel(openai('gpt-4o'));
-
-  const redis = new Redis();
-  const db = {}; // Your MongoDB instance
-
-  // Create session manager
-  const sessionManager = new SessionManager({
-    type: 'hybrid', // Redis + Database
-    redis,
-    db,
-    maxMessages: 50
-  });
-
-  // Get session
-  const session = sessionManager.getSession('user-123-session');
-
-  // Create agent
+async function multiTurnExample() {
   const agent = new Agent({
     name: 'Assistant',
+    model: openai('gpt-4o'),
     instructions: 'You are a helpful assistant'
   });
 
   // First message
-  await run(agent, 'My name is John', { session });
+  const result1 = await run(agent, 'My name is John');
 
-  // Second message - agent remembers context
-  const result = await run(agent, 'What is my name?', { session });
-  console.log(result.finalOutput); // "Your name is John"
+  // Second message - pass conversation history
+  const result2 = await run(agent, [
+    { role: 'user' as const, content: 'My name is John' },
+    { role: 'assistant' as const, content: result1.finalOutput },
+    { role: 'user' as const, content: 'What is my name?' }
+  ]);
+  console.log(result2.finalOutput); // "Your name is John"
 }
 
 // ============================================
@@ -198,8 +178,6 @@ async function sessionExample() {
 // ============================================
 
 async function handoffsExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   // Create specialized agents
   const productAgent = new Agent({
     name: 'Product Agent',
@@ -243,6 +221,7 @@ async function handoffsExample() {
   // Create main agent with transfers
   const mainAgent = new Agent({
     name: 'Main Agent',
+    model: openai('gpt-4o'),
     instructions: `
       You are the main customer service agent.
       When users ask about products, transfer to Product Agent.
@@ -261,11 +240,10 @@ async function handoffsExample() {
 // ============================================
 
 async function agentAsToolExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   // Create specialized agents
   const researchAgent = new Agent({
     name: 'Research Agent',
+    model: openai('gpt-4o'),
     instructions: 'You research topics thoroughly',
     tools: {
       web_search: tool({
@@ -280,6 +258,7 @@ async function agentAsToolExample() {
 
   const analysisAgent = new Agent({
     name: 'Analysis Agent',
+    model: openai('gpt-4o'),
     instructions: 'You analyze data',
     tools: {
       analyze: tool({
@@ -295,6 +274,7 @@ async function agentAsToolExample() {
   // Create main agent that uses other agents as tools
   const orchestrator = new Agent({
     name: 'Orchestrator',
+    model: openai('gpt-4o'),
     instructions: 'You coordinate specialized agents',
     tools: {
       research_agent: researchAgent.asTool({
@@ -317,11 +297,10 @@ async function agentAsToolExample() {
 // ============================================
 
 async function guardrailsExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   // Create agent with guardrails
   const agent = new Agent({
     name: 'Safe Agent',
+    model: openai('gpt-4o'),
     instructions: 'You are a helpful assistant',
     guardrails: [
       // Content safety on input
@@ -329,20 +308,20 @@ async function guardrailsExample() {
         type: 'input',
         model: openai('gpt-4o-mini')
       }),
-      
+
       // PII detection on output
       piiDetectionGuardrail({
         type: 'output',
         block: true
       }),
-      
+
       // Length check on output
       lengthGuardrail({
         type: 'output',
         maxLength: 500,
         unit: 'words'
       }),
-      
+
       // Custom guardrail
       customGuardrail({
         name: 'no_code',
@@ -363,7 +342,7 @@ async function guardrailsExample() {
   try {
     const result = await run(agent, 'Tell me about yourself');
     console.log(result.finalOutput);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Guardrail failed:', error.message);
   }
 }
@@ -373,10 +352,9 @@ async function guardrailsExample() {
 // ============================================
 
 async function streamingExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   const agent = new Agent({
     name: 'Story Agent',
+    model: openai('gpt-4o'),
     instructions: 'You write engaging stories'
   });
 
@@ -393,7 +371,7 @@ async function streamingExample() {
     if (event.type === 'text-delta' && event.textDelta) {
       process.stdout.write(event.textDelta);
     } else if (event.type === 'tool-call') {
-      console.log('\nCalling tool:', event.toolCall?.toolName);
+      console.log('\nCalling tool:', (event as any).toolCall?.toolName);
     }
   }
 
@@ -407,8 +385,6 @@ async function streamingExample() {
 // ============================================
 
 async function dynamicInstructionsExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   interface UserContext {
     userName: string;
     preferences: {
@@ -419,6 +395,7 @@ async function dynamicInstructionsExample() {
 
   const agent = new Agent<UserContext>({
     name: 'Adaptive Agent',
+    model: openai('gpt-4o'),
     instructions: (context) => {
       return `
         You are a helpful assistant.
@@ -446,8 +423,6 @@ async function dynamicInstructionsExample() {
 // ============================================
 
 async function structuredOutputExample() {
-  setDefaultModel(openai('gpt-4o'));
-
   // Define output schema
   const productSchema = z.object({
     name: z.string(),
@@ -462,12 +437,13 @@ async function structuredOutputExample() {
   // Create agent with output schema
   const agent = new Agent<any, Product>({
     name: 'Product Agent',
+    model: openai('gpt-4o'),
     instructions: 'Extract product information from user query',
-    outputSchema: productSchema
+    output: { schema: productSchema }
   });
 
   const result = await run(agent, 'A wireless mouse for $29.99 that has Bluetooth and rechargeable battery');
-  
+
   // result.finalOutput is now typed as Product
   console.log('Product:', result.finalOutput);
   console.log('Price:', result.finalOutput.price);
@@ -482,111 +458,9 @@ interface EcommerceContext {
   sessionId: string;
   cart: Array<{ productId: string; name: string; price: number; quantity: number }>;
   db: any;
-  redis: Redis;
 }
 
 async function completeEcommerceExample() {
-  setDefaultModel(openai('gpt-4o'));
-
-  const redis = new Redis();
-  const db = {}; // Your database
-
-  // Create session manager
-  const sessionManager = new SessionManager({
-    type: 'hybrid',
-    redis,
-    db
-  });
-
-  // Create tools
-  function createTools(context: EcommerceContext) {
-    return {
-      search_products: tool({
-        description: 'Search for products',
-        inputSchema: z.object({ 
-          query: z.string(),
-          category: z.string().optional()
-        }),
-        execute: async ({ query, category }) => {
-          // Simulate database search
-          return {
-            products: [
-              { id: '1', name: 'Laptop', price: 999, category: 'Electronics' },
-              { id: '2', name: 'Mouse', price: 29, category: 'Electronics' }
-            ]
-          };
-        }
-      }),
-
-      add_to_cart: tool({
-        description: 'Add product to cart',
-        inputSchema: z.object({
-          productId: z.string(),
-          quantity: z.number().default(1)
-        }),
-        execute: async ({ productId, quantity }) => {
-          // Find product
-          const product = { id: productId, name: 'Product', price: 100 };
-          
-          // Add to cart
-          context.cart.push({
-            productId,
-            name: product.name,
-            price: product.price,
-            quantity
-          });
-
-          return {
-            success: true,
-            cart: context.cart,
-            total: context.cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-          };
-        }
-      }),
-
-      view_cart: tool({
-        description: 'View shopping cart',
-        inputSchema: z.object({}),
-        execute: async () => {
-          const total = context.cart.reduce((sum, item) => 
-            sum + item.price * item.quantity, 0
-          );
-
-          return {
-            items: context.cart,
-            total,
-            itemCount: context.cart.length
-          };
-        }
-      }),
-
-      checkout: tool({
-        description: 'Process checkout',
-        inputSchema: z.object({
-          paymentMethod: z.enum(['credit_card', 'paypal'])
-        }),
-        execute: async ({ paymentMethod }) => {
-          const total = context.cart.reduce((sum, item) => 
-            sum + item.price * item.quantity, 0
-          );
-
-          // Create order
-          const orderId = 'order-' + Date.now();
-
-          // Clear cart
-          context.cart = [];
-
-          return {
-            success: true,
-            orderId,
-            total,
-            message: 'Order placed successfully'
-          };
-        }
-      })
-    };
-  }
-
   // Create specialized agents
   const productAgent = new Agent<EcommerceContext>({
     name: 'Product Agent',
@@ -610,7 +484,7 @@ async function completeEcommerceExample() {
     tools: {
       add_to_cart: tool({
         description: 'Add to cart',
-        inputSchema: z.object({ 
+        inputSchema: z.object({
           productId: z.string(),
           quantity: z.number()
         }),
@@ -663,6 +537,7 @@ async function completeEcommerceExample() {
   // Create main agent with transfers
   const mainAgent = new Agent<EcommerceContext>({
     name: 'Customer Service',
+    model: openai('gpt-4o'),
     instructions: `
       You are a customer service agent for an e-commerce store.
       Help customers find products, manage their cart, and checkout.
@@ -678,33 +553,33 @@ async function completeEcommerceExample() {
     userId: 'user-123',
     sessionId: 'session-456',
     cart: [],
-    db,
-    redis
+    db: {}
   };
-
-  // Get session
-  const session = sessionManager.getSession<EcommerceContext>(context.sessionId);
 
   // Run conversation
   console.log('=== E-commerce Agent Demo ===\n');
 
   // First query
-  let result = await run(mainAgent, 'Show me laptops', { context, session });
+  let result = await run(mainAgent, 'Show me laptops', { context });
   console.log('User: Show me laptops');
   console.log('Agent:', result.finalOutput, '\n');
 
-  // Second query
-  result = await run(mainAgent, 'Add the first one to my cart', { context, session });
+  // Second query - pass previous conversation history
+  result = await run(mainAgent, [
+    { role: 'user' as const, content: 'Show me laptops' },
+    { role: 'assistant' as const, content: result.finalOutput },
+    { role: 'user' as const, content: 'Add the first one to my cart' }
+  ], { context });
   console.log('User: Add the first one to my cart');
   console.log('Agent:', result.finalOutput, '\n');
 
   // Third query
-  result = await run(mainAgent, 'What\'s in my cart?', { context, session });
+  result = await run(mainAgent, 'What\'s in my cart?', { context });
   console.log('User: What\'s in my cart?');
   console.log('Agent:', result.finalOutput, '\n');
 
   // Fourth query
-  result = await run(mainAgent, 'Checkout with credit card', { context, session });
+  result = await run(mainAgent, 'Checkout with credit card', { context });
   console.log('User: Checkout with credit card');
   console.log('Agent:', result.finalOutput, '\n');
 }
@@ -721,7 +596,7 @@ async function main() {
     // await basicAgentExample();
     // await multiProviderExample();
     // await contextExample();
-    // await sessionExample();
+    // await multiTurnExample();
     // await handoffsExample();
     // await agentAsToolExample();
     // await guardrailsExample();

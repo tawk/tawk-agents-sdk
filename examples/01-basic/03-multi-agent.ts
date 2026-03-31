@@ -1,12 +1,12 @@
 /**
  * 03 - Multi-Agent System
  * 
- * Learn how multiple specialized agents can work together through handoffs.
+ * Learn how multiple specialized agents can work together through transfers.
  * This demonstrates agent coordination and task delegation.
  */
 
 import 'dotenv/config';
-import { Agent, run, tool } from 'tawk-agents-sdk';
+import { Agent, run, tool } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 

@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, run, lengthGuardrail, piiDetectionGuardrail } from 'tawk-agents-sdk';
+import { Agent, run, lengthGuardrail, piiDetectionGuardrail } from '../../src';
 import { openai } from '@ai-sdk/openai';
 
 async function main() {
@@ -18,8 +18,8 @@ async function main() {
     model: openai('gpt-4o-mini'),
     instructions: 'You are a helpful assistant.',
     guardrails: [
-      lengthGuardrail({ maxLength: 500 }),
-      piiDetectionGuardrail(),
+      lengthGuardrail({ type: 'output', maxLength: 500 }),
+      piiDetectionGuardrail({ type: 'output', block: true }),
     ],
   });
 

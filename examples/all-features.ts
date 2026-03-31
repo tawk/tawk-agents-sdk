@@ -28,20 +28,16 @@
  * 
  * @module examples/all-features
  * @author Tawk Agents SDK
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 import 'dotenv/config';
-import { 
-  Agent, 
-  run, 
+import {
+  Agent,
+  run,
   runStream,
-  setDefaultModel,
-  MemorySession,
-  raceAgents,
   // Guardrails
   contentSafetyGuardrail,
-  piiDetectionGuardrail,
   lengthGuardrail,
   // AI Features
   createEmbeddingTool,
@@ -53,9 +49,6 @@ import {
 } from '../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-
-// Set default model for all examples
-setDefaultModel(openai('gpt-4o-mini'));
 
 // ============================================
 // EXAMPLE 1: Basic Agent
@@ -81,6 +74,7 @@ export async function example1_BasicAgent() {
   
   const agent = new Agent({
     name: 'assistant',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a helpful assistant. Answer questions concisely.',
   });
   
@@ -96,7 +90,7 @@ export async function example1_BasicAgent() {
  * Example 2: Agent with Tools
  * 
  * Shows how to create an agent with custom tools that can perform actions.
- * Tools use AI SDK v5 format with inputSchema.
+ * Tools use AI SDK v6 format with inputSchema.
  * 
  * @example
  * ```typescript
@@ -116,6 +110,7 @@ export async function example2_AgentWithTools() {
   
   const agent = new Agent({
     name: 'calculator',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a calculator. Use tools to perform calculations.',
     tools: {
       add: {
@@ -186,6 +181,7 @@ export async function example3_ContextInjection() {
   
   const agent = new Agent<UserContext>({
     name: 'user-assistant',
+    model: openai('gpt-4o-mini'),
     instructions: (ctx) => `You are helping ${ctx.context.userName} (ID: ${ctx.context.userId})`,
     tools: {
       getUserInfo: {
@@ -242,18 +238,21 @@ export async function example4_MultiAgentHandoffs() {
   
   const salesAgent = new Agent({
     name: 'sales',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a sales agent. Answer: "I can help with sales and pricing."',
-    handoffDescription: 'Handle sales and pricing questions'
+    transferDescription: 'Handle sales and pricing questions'
   });
-  
+
   const supportAgent = new Agent({
     name: 'support',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a support agent. Answer: "I can help with technical issues."',
-    handoffDescription: 'Handle technical support questions'
+    transferDescription: 'Handle technical support questions'
   });
-  
+
   const triageAgent = new Agent({
     name: 'triage',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a triage agent. Route users to sales for pricing questions, support for technical issues.',
   });
   
@@ -290,6 +289,7 @@ export async function example5_Streaming() {
   
   const agent = new Agent({
     name: 'storyteller',
+    model: openai('gpt-4o-mini'),
     instructions: 'Tell a short story about AI agents.',
   });
   
@@ -307,31 +307,40 @@ export async function example5_Streaming() {
 // ============================================
 
 /**
- * Example 6: Session Management
- * 
+ * Example 6: Multi-turn Conversations
+ *
  * Shows how to maintain conversation history across multiple turns
- * using session management.
- * 
+ * by passing message arrays.
+ *
  * @example
  * ```typescript
- * const session = new MemorySession('user-123', 50);
- * 
- * await run(agent, 'My name is Alice', { session });
- * const result = await run(agent, 'What is my name?', { session });
+ * const result1 = await run(agent, 'My name is Alice');
+ * const result2 = await run(agent, [
+ *   { role: 'user', content: 'My name is Alice' },
+ *   { role: 'assistant', content: result1.finalOutput },
+ *   { role: 'user', content: 'What is my name?' }
+ * ]);
  * ```
  */
 export async function example6_SessionManagement() {
-  console.log('\n📝 Example 6: Session Management\n');
-  
-  const session = new MemorySession('user-123', 50);
+  console.log('\n📝 Example 6: Multi-turn Conversations\n');
+
   const agent = new Agent({
     name: 'conversational',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a conversational assistant. Remember our conversation.',
   });
-  
-  await run(agent, 'My name is Alice', { session });
-  const result = await run(agent, 'What is my name?', { session });
-  
+
+  // First turn
+  const result1 = await run(agent, 'My name is Alice');
+
+  // Second turn: pass conversation history as message array
+  const result = await run(agent, [
+    { role: 'user' as const, content: 'My name is Alice' },
+    { role: 'assistant' as const, content: result1.finalOutput },
+    { role: 'user' as const, content: 'What is my name?' }
+  ]);
+
   console.log('Response:', result.finalOutput);
 }
 
@@ -366,6 +375,7 @@ export async function example7_Guardrails() {
   
   const agent = new Agent({
     name: 'safe-agent',
+    model: openai('gpt-4o-mini'),
     instructions: 'You are a helpful assistant.',
     guardrails: [
       contentSafetyGuardrail({
@@ -422,8 +432,9 @@ export async function example8_StructuredOutput() {
   
   const agent = new Agent({
     name: 'data-extractor',
+    model: openai('gpt-4o-mini'),
     instructions: 'Extract user information from the text. Return ONLY valid JSON matching the schema. Do not include markdown code blocks, just the raw JSON object.',
-    outputSchema: userSchema
+    output: { schema: userSchema }
   });
   
   try {
@@ -463,6 +474,7 @@ export async function example9_Embeddings() {
   
   const agent = new Agent({
     name: 'embedding-agent',
+    model: openai('gpt-4o-mini'),
     instructions: 'You can generate embeddings for semantic search.',
     tools: {
       generateEmbedding: createEmbeddingTool(openai.embedding('text-embedding-3-small'))
@@ -506,6 +518,7 @@ export async function example10_ImageGeneration() {
     
     const agent = new Agent({
       name: 'image-creator',
+      model: openai('gpt-4o-mini'),
       instructions: 'You can generate images from text descriptions.',
       tools: {
         generateImage: createImageGenerationTool(imageModel)
@@ -552,6 +565,7 @@ export async function example11_Reranking() {
     
     const agent = new Agent({
       name: 'search-assistant',
+      model: openai('gpt-4o-mini'),
       instructions: 'You can rerank search results to find the most relevant documents.',
       tools: {
         rerank: createRerankTool(cohere.reranking('rerank-v3.5'))
@@ -586,50 +600,46 @@ export async function example11_Reranking() {
 // ============================================
 
 /**
- * Example 12: Race Agents
- * 
- * Demonstrates parallel execution of multiple agents, returning
- * the first successful result. Useful for fallback patterns.
- * 
+ * Example 12: Parallel Agents
+ *
+ * Demonstrates parallel execution of multiple agents using Promise.all.
+ * Useful for running multiple agents simultaneously and aggregating results.
+ *
  * @example
  * ```typescript
- * const result = await raceAgents(
- *   [fastAgent, smartAgent],
- *   'What is TypeScript?',
- *   { timeoutMs: 5000 }
- * );
- * 
- * console.log(`Winner: ${result.winningAgent.name}`);
+ * const [result1, result2] = await Promise.all([
+ *   run(fastAgent, 'What is TypeScript?'),
+ *   run(smartAgent, 'What is TypeScript?'),
+ * ]);
  * ```
  */
 export async function example12_RaceAgents() {
-  console.log('\n📝 Example 12: Race Agents\n');
-  
-  const fastAgent = new Agent({
-    name: 'fast',
+  console.log('\n📝 Example 12: Parallel Agents\n');
+
+  const conciseAgent = new Agent({
+    name: 'concise',
     model: openai('gpt-4o-mini'),
     instructions: 'Answer quickly and concisely in one sentence.',
   });
-  
-  const smartAgent = new Agent({
-    name: 'smart',
-    model: openai('gpt-4o-mini'), // Use same model for fair comparison
+
+  const detailedAgent = new Agent({
+    name: 'detailed',
+    model: openai('gpt-4o-mini'),
     instructions: 'Answer with detailed information in multiple sentences.',
   });
-  
+
   try {
-    // Race agents without timeout to avoid timeout errors after winner is determined
-    const result = await raceAgents(
-      [fastAgent, smartAgent],
-      'What is the capital of France?'
-    );
-    
-    console.log(`Winner: ${result.winningAgent.name}`);
-    console.log('Response:', result.finalOutput);
-    console.log('Participants:', result.metadata.raceParticipants?.join(', ') || 'N/A');
+    // Run both agents in parallel
+    const [result1, result2] = await Promise.all([
+      run(conciseAgent, 'What is the capital of France?'),
+      run(detailedAgent, 'What is the capital of France?'),
+    ]);
+
+    console.log('Concise answer:', result1.finalOutput);
+    console.log('Detailed answer:', result2.finalOutput);
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.log('⚠️  Race agents error:', err.message);
+    console.log('⚠️  Parallel agents error:', err.message);
   }
 }
 
@@ -692,7 +702,8 @@ export async function example14_DynamicInstructions() {
   
   const agent = new Agent({
     name: 'contextual',
-    instructions: (context) => {
+    model: openai('gpt-4o-mini'),
+    instructions: (_context) => {
       const hour = new Date().getHours();
       const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
       return `You are a helpful assistant. ${greeting}! The current time is ${new Date().toLocaleTimeString()}.`;
@@ -734,6 +745,7 @@ export async function example15_DynamicToolEnabling() {
   
   const agent = new Agent<Context>({
     name: 'role-based',
+    model: openai('gpt-4o-mini'),
     instructions: 'You have different tools based on user role.',
     tools: {
       publicTool: {

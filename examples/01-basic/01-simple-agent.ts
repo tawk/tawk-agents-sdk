@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, run } from 'tawk-agents-sdk';
+import { Agent, run } from '../../src';
 import { openai } from '@ai-sdk/openai';
 
 async function main() {

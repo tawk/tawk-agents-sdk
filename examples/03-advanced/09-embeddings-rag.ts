@@ -7,15 +7,14 @@
  * - Building a simple RAG system with agents
  */
 
-import { 
-  Agent, 
+import {
+  Agent,
   run,
   tool,
   generateEmbeddingAI,
   generateEmbeddingsAI,
   cosineSimilarity,
   createEmbeddingTool,
-  setDefaultModel,
 } from '../../src';
 import { logger, handleError, isAPIKeyError } from '../utils';
 import { openai } from '@ai-sdk/openai';
@@ -114,7 +113,7 @@ async function simpleRAG() {
     
     // Knowledge base
     const knowledgeBase = [
-      'Tawk Agents SDK provides AI agent capabilities built on AI SDK v5',
+      'Tawk Agents SDK provides AI agent capabilities built on AI SDK v6',
       'The SDK supports tool calling, guardrails, and multi-agent handoffs',
       'Embeddings enable semantic search and RAG patterns',
       'Structured output ensures type-safe data extraction',
@@ -214,9 +213,7 @@ async function embeddingToolExample() {
 
 async function main() {
   logger.section('Embeddings & RAG Examples');
-  
-  setDefaultModel(openai('gpt-4o-mini'));
-  
+
   try {
     await basicEmbeddings();
     await similaritySearch();

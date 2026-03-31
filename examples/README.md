@@ -39,6 +39,7 @@ Intermediate features for production apps.
 | **05-guardrails.ts** | Safety and validation | Input/output guardrails |
 | **06-streaming.ts** | Real-time responses | Streaming, events |
 | **07-tracing.ts** | Observability | Langfuse, debugging |
+| **08-langfuse-tracing.ts** | Langfuse integration | Trace setup, spans |
 
 ### 03-advanced/ - Advanced Features
 
@@ -50,7 +51,6 @@ Advanced patterns and integrations.
 | **10-vision.ts** | Image understanding | Vision models, multimodal |
 | **11-toon-format.ts** | Token optimization | TOON format, efficiency |
 | **12-mcp-integration.ts** | Model Context Protocol | MCP servers, tool discovery |
-| **13-dynamic-approvals.ts** | Human-in-the-loop | Approvals, safety |
 | **14-multi-agent-research.ts** | Complex coordination | Research patterns |
 
 ### 04-production/ - Production Ready
@@ -69,6 +69,9 @@ Proven agentic patterns and architectures.
 | File | Description | Key Concepts |
 |------|-------------|--------------|
 | **17-agentic-patterns.ts** | Agentic design patterns | Architecture, best practices |
+| **18-goal-planner-reflector.ts** | Goal/Planner/Reflector agents | Specialized roles, agent transfers |
+| **19-multi-agent-coordination.ts** | Pipeline coordination (research → analyze → write → review) | Back-and-forth transfers |
+| **20-real-coordination-demo.ts** | Real agent-to-agent coordination with data collection pipeline | Live coordination, tool use |
 
 ---
 
@@ -88,8 +91,7 @@ Proven agentic patterns and architectures.
 ### Advanced Path (2+ hours)
 8. 09-embeddings-rag.ts → Semantic search
 9. 12-mcp-integration.ts → Tool discovery
-10. 13-dynamic-approvals.ts → HITL safety
-11. 15-ecommerce-system.ts → Full system
+10. 15-ecommerce-system.ts → Full system
 
 ---
 
@@ -132,7 +134,7 @@ OPENAI_API_KEY=sk-...
 
 # Optional
 ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_AI_API_KEY=...
+GOOGLE_GENERATIVE_AI_API_KEY=...
 LANGFUSE_PUBLIC_KEY=pk-...
 LANGFUSE_SECRET_KEY=sk-...
 ```
@@ -170,7 +172,7 @@ const result = await run(agent, 'Hello!');
 
 **Add tools:**
 ```typescript
-const tool = tool({
+const calcTool = tool({
   description: 'Calculate',
   inputSchema: z.object({ expr: z.string() }),
   execute: async ({ expr }) => eval(expr)
@@ -184,10 +186,13 @@ const coordinator = new Agent({
 });
 ```
 
-**Add memory:**
+**Multi-turn conversation:**
 ```typescript
-const session = new MemorySession('user-id');
-await run(agent, 'Hello', { session });
+// Multi-turn conversation
+const messages = [
+  { role: 'user' as const, content: 'Hello' },
+];
+const result = await run(agent, messages);
 ```
 
 ---

@@ -18,12 +18,9 @@
  */
 
 import 'dotenv/config';
-import { Agent, run, tool, setDefaultModel } from '../../src';
+import { Agent, run, tool } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-
-// Set default model
-setDefaultModel(openai('gpt-4o-mini'));
 
 // ============================================
 // STRUCTURED OUTPUT SCHEMAS
@@ -243,8 +240,8 @@ The JSON structure must be:
 
 Return ONLY the JSON object, nothing else.`,
     
-    outputSchema: SubagentFindingSchema,
-    
+    output: { schema: SubagentFindingSchema },
+
     tools: {
       web_search: tool({
         description: 'Search the web for information related to your research task',
@@ -285,7 +282,7 @@ Return ONLY the JSON object, nothing else.`,
         },
       }),
     },
-    maxSteps: 15,
+    execution: { maxSteps: 15 },
   });
 }
 
@@ -297,7 +294,7 @@ Return ONLY the JSON object, nothing else.`,
 // We'll create the final report from synthesized data instead
 const citationAgent = new Agent<ResearchContext>({
   name: 'CitationAgent',
-  handoffDescription: 'Transfer to CitationAgent when research is complete and you need to add proper citations to the final report. Include the synthesized report in the transfer context.',
+  transferDescription: 'Transfer to CitationAgent when research is complete and you need to add proper citations to the final report. Include the synthesized report in the transfer context.',
   model: openai('gpt-4o-mini'),
   instructions: `You are a citation agent that processes research documents and adds proper citations.
 
@@ -571,45 +568,47 @@ CRITICAL RULES:
   
   // Transfer to CitationAgent
   subagents: [citationAgent],
-  
-  // Add logging for each step
-  onStepFinish: (step) => {
-    if (step.toolCalls && step.toolCalls.length > 0) {
-      step.toolCalls.forEach(tc => {
-        if (tc.toolName === 'synthesize_findings') {
-          console.log(`\n   ✅ SYNTHESIS TOOL CALLED`);
-        } else if (tc.toolName === 'transfer_to_citationagent') {
-          console.log(`\n   🔄 HANDING OFF TO CITATION AGENT...`);
-          console.log(`      Reason: ${tc.args?.reason || 'N/A'}`);
-          if (tc.args?.context) {
-            console.log(`      Context length: ${tc.args.context.length} chars`);
+
+  hooks: {
+    // Add logging for each step
+    onStepFinish: (step) => {
+      if (step.toolCalls && step.toolCalls.length > 0) {
+        step.toolCalls.forEach(tc => {
+          if (tc.toolName === 'synthesize_findings') {
+            console.log(`\n   ✅ SYNTHESIS TOOL CALLED`);
+          } else if (tc.toolName === 'transfer_to_citationagent') {
+            console.log(`\n   🔄 HANDING OFF TO CITATION AGENT...`);
+            console.log(`      Reason: ${tc.args?.reason || 'N/A'}`);
+            if (tc.args?.context) {
+              console.log(`      Context length: ${tc.args.context.length} chars`);
+            }
+          } else if (tc.toolName === 'execute_research_steps') {
+            console.log(`\n   ✅ PARALLEL EXECUTION COMPLETE`);
           }
-        } else if (tc.toolName === 'execute_research_steps') {
-          console.log(`\n   ✅ PARALLEL EXECUTION COMPLETE`);
-        }
-      });
-    }
+        });
+      }
+    },
+
+    // Prevent finishing until handoff is complete
+    shouldFinish: (context: ResearchContext, toolResults: any[]) => {
+      const hasSynthesized = context.synthesizedReport !== undefined;
+
+      if (!hasSynthesized && context.subagentResults.length > 0) {
+        console.log('   ⚠️  Agent trying to finish, but synthesis not complete. Forcing continuation...');
+        return false;
+      }
+
+      const lastToolResult = toolResults[toolResults.length - 1];
+      if (lastToolResult && typeof lastToolResult === 'object' && 'synthesized' in lastToolResult && lastToolResult.synthesized) {
+        console.log('   ⚠️  Synthesis just completed. Must hand off to CitationAgent. Forcing continuation...');
+        return false;
+      }
+
+      return hasSynthesized;
+    },
   },
-  
-  // Prevent finishing until handoff is complete
-  shouldFinish: (context: ResearchContext, toolResults: any[]) => {
-    const hasSynthesized = context.synthesizedReport !== undefined;
-    
-    if (!hasSynthesized && context.subagentResults.length > 0) {
-      console.log('   ⚠️  Agent trying to finish, but synthesis not complete. Forcing continuation...');
-      return false;
-    }
-    
-    const lastToolResult = toolResults[toolResults.length - 1];
-    if (lastToolResult && typeof lastToolResult === 'object' && 'synthesized' in lastToolResult && lastToolResult.synthesized) {
-      console.log('   ⚠️  Synthesis just completed. Must hand off to CitationAgent. Forcing continuation...');
-      return false;
-    }
-    
-    return hasSynthesized;
-  },
-  
-  maxSteps: 50,
+
+  execution: { maxSteps: 50 },
 });
 
 // ============================================

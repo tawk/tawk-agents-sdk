@@ -4,12 +4,10 @@
  * Tests if traces are being sent to Langfuse properly
  */
 
-import { Agent, run, setDefaultModel } from '../src/index';
+import { Agent, run } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import 'dotenv/config';
-
-setDefaultModel(openai('gpt-4o-mini'));
 
 console.log('\n🧪 LANGFUSE TRACE TEST\n');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -17,6 +15,7 @@ console.log('━━━━━━━━━━━━━━━━━━━━━━�
 // Simple agent
 const testAgent = new Agent({
   name: 'TestAgent',
+  model: openai('gpt-4o-mini'),
   instructions: 'You are a test agent. Keep responses very short (under 50 words).',
   tools: {
     testTool: {

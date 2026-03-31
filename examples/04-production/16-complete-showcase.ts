@@ -1,18 +1,17 @@
 /**
- * 🚀 Tawk Agents SDK v1.0.0 - COMPLETE SHOWCASE
- * 
- * Production-ready example demonstrating ALL SDK features.
- * 
+ * Tawk Agents SDK - COMPLETE SHOWCASE
+ *
+ * Production-ready example demonstrating all SDK features.
+ *
  * Run: ts-node examples/complete-showcase.ts
  */
 
 import 'dotenv/config';
 import {
-  Agent, run, runStream, tool, setDefaultModel,
-  MemorySession,
+  Agent, run, runStream, tool,
   generateEmbeddingAI, generateEmbeddingsAI, cosineSimilarity,
   generateImageAI, generateSpeechAI,
-  Usage, raceAgents, customGuardrail,
+  Usage, customGuardrail,
 } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
@@ -20,10 +19,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 async function main() {
-  console.log('🚀 Tawk Agents SDK v1.0.0 - Complete Showcase\n');
+  console.log('🚀 Tawk Agents SDK - Complete Showcase\n');
   console.log('=' .repeat(80) + '\n');
 
-  setDefaultModel(openai('gpt-4o-mini'));
   const usage = new Usage();
 
   // ============================================================================
@@ -79,13 +77,13 @@ async function main() {
         model: openai.embedding('text-embedding-3-small'),
         value: query,
       });
-      
+
       // Find most similar documents
       const similarities = docEmbeddingsResult.embeddings.map((docEmbed, i) => ({
         doc: docs[i],
         score: cosineSimilarity(queryEmbed.embedding, docEmbed),
       }));
-      
+
       similarities.sort((a, b) => b.score - a.score);
       return {
         results: similarities.slice(0, 3).map(r => r.doc),
@@ -122,6 +120,7 @@ async function main() {
 
   const researchAgent = new Agent({
     name: 'ResearchAgent',
+    model: openai('gpt-4o-mini'),
     instructions: 'Research assistant. Use retrieval tool.',
     tools: { search: retrievalTool },
     guardrails: [piiGuardrail],
@@ -129,6 +128,7 @@ async function main() {
 
   const generalAgent = new Agent({
     name: 'GeneralAgent',
+    model: openai('gpt-4o-mini'),
     instructions: 'General assistant.',
     tools: { weather: weatherTool, calc: calcTool },
     guardrails: [piiGuardrail],
@@ -144,11 +144,9 @@ async function main() {
   console.log('🎬 DEMONSTRATIONS');
   console.log('=' .repeat(80) + '\n');
 
-  const session = new MemorySession('demo-session', 50);
-
   // 1. Basic Agent
   console.log('📍 1. Agent with Tools\n');
-  const r1 = await run(researchAgent, 'What is the Eiffel Tower?', { session });
+  const r1 = await run(researchAgent, 'What is the Eiffel Tower?');
   console.log(`✅ ${r1.finalOutput.substring(0, 100)}...`);
   console.log(`📊 Tokens: ${r1.metadata.totalTokens}\n`);
   usage.add(new Usage({
@@ -172,17 +170,20 @@ async function main() {
     totalTokens: sr.metadata.totalTokens
   }));
 
-  // 3. Session Memory
-  console.log('📍 3. Session Memory\n');
-  await run(researchAgent, 'Tell me about Paris', { session });
-  const r3 = await run(researchAgent, 'What else is there?', { session });
-  console.log(`✅ ${r3.finalOutput.substring(0, 100)}...`);
-  const hist = await session.getHistory();
-  console.log(`📊 ${hist.length} messages in session\n`);
+  // 3. Multi-turn conversation (using message array instead of session)
+  console.log('📍 3. Multi-turn Conversation\n');
+  const turn1 = await run(researchAgent, 'Tell me about Paris');
+  const turn2 = await run(researchAgent, [
+    { role: 'user' as const, content: 'Tell me about Paris' },
+    { role: 'assistant' as const, content: turn1.finalOutput },
+    { role: 'user' as const, content: 'What else is there?' }
+  ]);
+  console.log(`✅ ${turn2.finalOutput.substring(0, 100)}...`);
+  console.log(`📊 2 conversation turns completed\n`);
   usage.add(new Usage({
-    inputTokens: r3.metadata.promptTokens,
-    outputTokens: r3.metadata.completionTokens,
-    totalTokens: r3.metadata.totalTokens
+    inputTokens: turn2.metadata.promptTokens,
+    outputTokens: turn2.metadata.completionTokens,
+    totalTokens: turn2.metadata.totalTokens
   }));
 
   // 4. Structured Output (using Agent with instructions)
@@ -263,22 +264,14 @@ async function main() {
     console.log(`⚠️  Audio generation error: ${error.message}\n`);
   }
 
-  // 9. Race Agents
+  // 9. Parallel Agent Execution
   console.log('📍 9. Parallel Execution\n');
-  const race = await raceAgents(
-    [researchAgent, generalAgent],
-    'What is 10 + 20?',
-    { timeoutMs: 10000 }
-  );
-  console.log(`✅ Winner: ${race.winningAgent.name}`);
-  console.log(`   ${race.finalOutput.substring(0, 80)}...\n`);
-  if (race.metadata) {
-    usage.add(new Usage({
-      inputTokens: race.metadata.promptTokens,
-      outputTokens: race.metadata.completionTokens,
-      totalTokens: race.metadata.totalTokens
-    }));
-  }
+  const [parallelResult1, parallelResult2] = await Promise.all([
+    run(researchAgent, 'What is 10 + 20?'),
+    run(generalAgent, 'What is 10 + 20?'),
+  ]);
+  console.log(`✅ Research: ${parallelResult1.finalOutput.substring(0, 60)}`);
+  console.log(`✅ General:  ${parallelResult2.finalOutput.substring(0, 60)}\n`);
 
   // 10. Guardrails
   console.log('📍 10. Guardrails\n');
@@ -299,7 +292,7 @@ async function main() {
 
   console.log('✅ ALL FEATURES DEMONSTRATED:\n');
   [
-    '✅ Agents', '✅ Tools', '✅ Streaming', '✅ Sessions',
+    '✅ Agents', '✅ Tools', '✅ Streaming', '✅ Multi-turn',
     '✅ Embeddings', '✅ Retrieval', '✅ Image Gen', '✅ Audio',
     '✅ Vision', '✅ Parallel', '✅ Guardrails', '✅ Usage Tracking',
   ].forEach(f => console.log(f));

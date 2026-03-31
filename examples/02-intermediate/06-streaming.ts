@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, runStream } from 'tawk-agents-sdk';
+import { Agent, runStream } from '../../src';
 import { openai } from '@ai-sdk/openai';
 
 async function main() {
@@ -27,7 +27,7 @@ async function main() {
   const stream = await runStream(agent, 'Explain how neural networks work in 3 paragraphs');
 
   // Listen to events
-  for await (const event of stream.eventStream) {
+  for await (const event of stream.fullStream) {
     if (event.type === 'text-delta') {
       process.stdout.write(event.textDelta);
     }
@@ -36,7 +36,7 @@ async function main() {
   console.log('\n' + '─'.repeat(60));
 
   // Get final result
-  const result = await stream.result;
+  const result = await stream.completed;
   console.log('\n📊 Metadata:');
   console.log('- Total tokens:', result.metadata.totalTokens);
   console.log('- Steps:', result.steps.length);

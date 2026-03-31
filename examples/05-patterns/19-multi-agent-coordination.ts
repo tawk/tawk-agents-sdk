@@ -1,23 +1,20 @@
 /**
  * Multi-Agent Coordination Demo
- * 
+ *
  * Shows agents working TOGETHER to solve a complex task:
  * - Researcher gathers data
  * - Analyzer processes it
  * - Writer creates report
  * - Reviewer provides feedback
  * - Writer revises based on feedback
- * 
+ *
  * Real coordination with back-and-forth transfers!
  */
 
-import { Agent, run, setDefaultModel } from '../src/index';
+import { Agent, run } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { MemorySession } from '../src/sessions';
 import 'dotenv/config';
-
-setDefaultModel(openai('gpt-4o-mini'));
 
 // ============================================
 // 1. RESEARCH AGENT - Gathers information
@@ -25,6 +22,7 @@ setDefaultModel(openai('gpt-4o-mini'));
 
 const researchAgent = new Agent({
   name: 'Researcher',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a research agent. Your job is to gather information on topics.
 
@@ -36,11 +34,11 @@ When given a research request:
 
 Be thorough and cite sources.
   `,
-  
+
   tools: {
     search: {
       description: 'Search for information on a topic',
-      inputSchema: z.object({ 
+      inputSchema: z.object({
         query: z.string(),
         numResults: z.number().default(3)
       }),
@@ -62,12 +60,12 @@ Be thorough and cite sources.
             ]
           }
         };
-        
+
         const key = Object.keys(topics).find(k => query.toLowerCase().includes(k)) || 'ai agent architectures';
         return topics[key];
       }
     },
-    
+
     fetch: {
       description: 'Fetch detailed information about a specific topic',
       inputSchema: z.object({ topic: z.string() }),
@@ -82,7 +80,7 @@ Be thorough and cite sources.
       }
     }
   },
-  
+
   subagents: [] // Will set below
 });
 
@@ -92,6 +90,7 @@ Be thorough and cite sources.
 
 const analyzerAgent = new Agent({
   name: 'Analyzer',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are an analysis agent. You process research data and extract insights.
 
@@ -103,11 +102,11 @@ When you receive research data:
 
 Be analytical and insightful.
   `,
-  
+
   tools: {
     analyze: {
       description: 'Analyze research data and extract insights',
-      inputSchema: z.object({ 
+      inputSchema: z.object({
         data: z.string(),
         focusArea: z.string().optional()
       }),
@@ -125,7 +124,7 @@ Be analytical and insightful.
         };
       }
     },
-    
+
     compare: {
       description: 'Compare different approaches or solutions',
       inputSchema: z.object({ items: z.array(z.string()) }),
@@ -143,7 +142,7 @@ Be analytical and insightful.
       }
     }
   },
-  
+
   subagents: [] // Will set below
 });
 
@@ -153,6 +152,7 @@ Be analytical and insightful.
 
 const writerAgent = new Agent({
   name: 'Writer',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a content writer agent. You create well-structured reports.
 
@@ -165,11 +165,11 @@ When you receive analysis:
 
 Write clearly and professionally.
   `,
-  
+
   tools: {
     draft: {
       description: 'Create a draft document',
-      inputSchema: z.object({ 
+      inputSchema: z.object({
         title: z.string(),
         sections: z.array(z.object({
           heading: z.string(),
@@ -188,10 +188,10 @@ Write clearly and professionally.
         };
       }
     },
-    
+
     revise: {
       description: 'Revise content based on feedback',
-      inputSchema: z.object({ 
+      inputSchema: z.object({
         content: z.string(),
         feedback: z.string()
       }),
@@ -204,7 +204,7 @@ Write clearly and professionally.
       }
     }
   },
-  
+
   subagents: [] // Will set below
 });
 
@@ -214,6 +214,7 @@ Write clearly and professionally.
 
 const reviewerAgent = new Agent({
   name: 'Reviewer',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are a quality reviewer agent. You evaluate content and provide feedback.
 
@@ -226,11 +227,11 @@ When you receive a draft:
 
 Be constructive and thorough.
   `,
-  
+
   tools: {
     review: {
       description: 'Review content quality',
-      inputSchema: z.object({ 
+      inputSchema: z.object({
         content: z.string(),
         criteria: z.array(z.string()).optional()
       }),
@@ -240,7 +241,7 @@ Be constructive and thorough.
         return {
           overallScore: score,
           needsRevision: score < 75,
-          feedback: score < 75 
+          feedback: score < 75
             ? 'Needs more detail in the analysis section and better examples'
             : 'Excellent work! Ready for publication',
           strengths: ['Clear structure', 'Good insights'],
@@ -250,7 +251,7 @@ Be constructive and thorough.
       }
     }
   },
-  
+
   subagents: [] // Will set below
 });
 
@@ -260,6 +261,7 @@ Be constructive and thorough.
 
 const coordinatorAgent = new Agent({
   name: 'Coordinator',
+  model: openai('gpt-4o-mini'),
   instructions: `
 You are the coordinator agent. You manage the workflow.
 
@@ -271,7 +273,7 @@ When you receive a user request:
 
 You orchestrate the entire process.
   `,
-  
+
   subagents: [] // Will set below
 });
 
@@ -306,14 +308,11 @@ async function testCoordination() {
   console.log('   Coordinator → Researcher → Analyzer → Writer → Reviewer');
   console.log('   (Reviewer may send back to Writer for revision)\n');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  
-  const session = new MemorySession('coordination-test');
-  
+
   const result = await run(
     coordinatorAgent,
     'Create a comprehensive report on AI agent architectures, including analysis of different patterns and their tradeoffs',
     {
-      session,
       maxTurns: 30, // Allow many turns for coordination
       context: {
         reportFormat: 'professional',
@@ -321,39 +320,39 @@ async function testCoordination() {
       }
     }
   );
-  
+
   console.log('\n\n📊 COORDINATION RESULTS');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  
+
   console.log('🔄 Agent Transfer Chain:');
   if (result.metadata.handoffChain && result.metadata.handoffChain.length > 0) {
     console.log('   ' + result.metadata.handoffChain.join(' → '));
   } else {
     console.log('   Only Coordinator (no transfers happened)');
   }
-  
+
   console.log('\n🤖 Agents Involved:', result.metadata.agentMetrics?.length || 1);
   result.metadata.agentMetrics?.forEach(metric => {
     console.log(`   ✓ ${metric.agentName}: ${metric.turns} turn(s)`);
   });
-  
+
   console.log('\n🔧 Tools Used:', result.metadata.totalToolCalls);
   console.log('💰 Total Tokens:', result.metadata.totalTokens);
   console.log('⏱️  Total Turns:', result.steps.length);
-  
+
   console.log('\n📝 Final Output (truncated):');
-  const output = typeof result.finalOutput === 'string' 
-    ? result.finalOutput 
+  const output = typeof result.finalOutput === 'string'
+    ? result.finalOutput
     : JSON.stringify(result.finalOutput, null, 2);
   console.log('   ' + output.substring(0, 500) + '...');
-  
+
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  
+
   // Show detailed step-by-step coordination
   console.log('📋 STEP-BY-STEP COORDINATION:\n');
   result.steps.forEach((step, i) => {
     console.log(`Step ${i + 1}:`);
-    console.log(`  Agent: ${step.agent || 'Unknown'}`);
+    console.log(`  Agent: ${step.agentName || 'Unknown'}`);
     console.log(`  Tool Calls: ${step.toolCalls?.length || 0}`);
     if (step.toolCalls && step.toolCalls.length > 0) {
       step.toolCalls.forEach(tc => {
@@ -362,7 +361,7 @@ async function testCoordination() {
     }
     console.log();
   });
-  
+
   return result;
 }
 
@@ -383,12 +382,11 @@ if (require.main === module) {
     });
 }
 
-export { 
-  coordinatorAgent, 
-  researchAgent, 
-  analyzerAgent, 
-  writerAgent, 
+export {
+  coordinatorAgent,
+  researchAgent,
+  analyzerAgent,
+  writerAgent,
   reviewerAgent,
-  testCoordination 
+  testCoordination
 };
-

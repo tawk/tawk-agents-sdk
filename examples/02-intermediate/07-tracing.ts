@@ -33,11 +33,11 @@ import {
   Agent,
   run,
   tool,
-  initializeLangfuse,
+  initLangfuse,
   isLangfuseEnabled,
   withTrace,
-  withFunctionSpan,
-} from '../dist/index';
+  createContextualSpan,
+} from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -50,7 +50,10 @@ console.log('\n🔍 Tool Call Tracing with Langfuse Example\n');
 console.log('📋 Step 1: Initialize Langfuse\n');
 
 // Initialize Langfuse (auto-initializes if env vars are present)
-const langfuse = initializeLangfuse();
+const langfuse = initLangfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
 
 if (isLangfuseEnabled()) {
   console.log('✅ Langfuse tracing enabled');
@@ -210,18 +213,17 @@ async function example3_ComplexWorkflow() {
 
 async function example4_ManualToolTracing() {
   console.log('━'.repeat(80));
-  console.log('🧪 EXAMPLE 4: Manual Tool Tracing with withFunctionSpan');
+  console.log('🧪 EXAMPLE 4: Manual Tool Tracing with createContextualSpan');
   console.log('━'.repeat(80) + '\n');
 
   // Manual tracing for custom tool execution
   await withTrace(
     'Manual Tool Execution',
-    async (trace) => {
+    async () => {
       console.log('📝 Manually tracing tool execution...\n');
 
-      // Trace a custom function
-      const result1 = await withFunctionSpan(
-        trace,
+      // Trace a custom function using createContextualSpan
+      const result1 = await createContextualSpan(
         'customCalculation',
         { operation: 'square', value: 25 },
         async () => {
@@ -233,8 +235,7 @@ async function example4_ManualToolTracing() {
       console.log('✅ Custom calculation result:', result1);
 
       // Trace another function
-      const result2 = await withFunctionSpan(
-        trace,
+      const result2 = await createContextualSpan(
         'dataProcessing',
         { items: 10, operation: 'filter' },
         async () => {
@@ -319,7 +320,7 @@ async function main() {
     console.log('   - Tool calls are automatically traced');
     console.log('   - Agent executions are traced');
     console.log('   - Handoffs are traced');
-    console.log('   - Custom spans can be added with withFunctionSpan');
+    console.log('   - Custom spans can be added with createContextualSpan');
     console.log('   - All traces available in Langfuse dashboard');
 
     if (isLangfuseEnabled()) {

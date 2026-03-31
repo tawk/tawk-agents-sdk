@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, run, tool } from 'tawk-agents-sdk';
+import { Agent, run, tool } from '../../src';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
