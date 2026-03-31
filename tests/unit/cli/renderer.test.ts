@@ -8,8 +8,9 @@ describe('StreamRenderer', () => {
   let stdoutOutput: string;
   let stderrOutput: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     renderer = new StreamRenderer(false);
+    await renderer.init();
     stdoutOutput = '';
     stderrOutput = '';
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation((data: any) => {
@@ -28,9 +29,9 @@ describe('StreamRenderer', () => {
     stderrSpy.mockRestore();
   });
 
-  it('should render agent-start event', () => {
+  it('should start spinner on agent-start', () => {
     renderer.render({ type: 'agent-start', agentName: 'TestAgent' });
-    expect(stdoutOutput).toContain('Agent: TestAgent');
+    expect(stderrOutput).toContain('Thinking...');
   });
 
   it('should render text-delta directly to stdout', () => {
@@ -39,19 +40,46 @@ describe('StreamRenderer', () => {
     expect(stdoutOutput).toBe('Hello World');
   });
 
-  it('should render tool-call event with tool name', () => {
+  it('should stop spinner before text-delta', () => {
+    renderer.render({ type: 'agent-start', agentName: 'Test' });
+    stderrOutput = '';
+    renderer.render({ type: 'text-delta', textDelta: 'Hello' });
+    expect(stderrOutput).toContain('\r\x1b[K');
+  });
+
+  it('should render tool-call with ⎿ prefix and tool name', () => {
     renderer.render({
       type: 'tool-call',
       toolName: 'calculator',
       args: { expression: '2+2' },
       toolCallId: 'tc-1',
     });
+    expect(stdoutOutput).toContain('⎿');
     expect(stdoutOutput).toContain('calculator');
-    expect(stdoutOutput).toContain('⚡');
   });
 
-  it('should render tool-result event with green checkmark', () => {
-    // First start the tool to register timing
+  it('should show compact tool args', () => {
+    renderer.render({
+      type: 'tool-call',
+      toolName: 'read_file',
+      args: { path: 'src/index.ts' },
+      toolCallId: 'tc-1',
+    });
+    expect(stdoutOutput).toContain('src/index.ts');
+  });
+
+  it('should start spinner after tool-call', () => {
+    stderrOutput = '';
+    renderer.render({
+      type: 'tool-call',
+      toolName: 'calculator',
+      args: {},
+      toolCallId: 'tc-1',
+    });
+    expect(stderrOutput).toContain('Running calculator...');
+  });
+
+  it('should render tool-result as indented preview', () => {
     renderer.render({
       type: 'tool-call',
       toolName: 'calculator',
@@ -64,8 +92,24 @@ describe('StreamRenderer', () => {
       result: { answer: 4 },
       toolCallId: 'tc-1',
     });
-    expect(stdoutOutput).toContain('✓');
-    expect(stdoutOutput).toContain('Result');
+    expect(stdoutOutput).toContain('answer');
+  });
+
+  it('should restart spinner after tool-result', () => {
+    renderer.render({
+      type: 'tool-call',
+      toolName: 'calculator',
+      args: {},
+      toolCallId: 'tc-1',
+    });
+    stderrOutput = '';
+    renderer.render({
+      type: 'tool-result',
+      toolName: 'calculator',
+      result: { answer: 4 },
+      toolCallId: 'tc-1',
+    });
+    expect(stderrOutput).toContain('Thinking...');
   });
 
   it('should render transfer event', () => {
@@ -75,9 +119,8 @@ describe('StreamRenderer', () => {
       to: 'Agent2',
       reason: 'needs specialist',
     });
-    expect(stdoutOutput).toContain('Agent1');
     expect(stdoutOutput).toContain('Agent2');
-    expect(stdoutOutput).toContain('↗');
+    expect(stdoutOutput).toContain('Transfer');
   });
 
   it('should not render step events in non-verbose mode', () => {
@@ -89,7 +132,7 @@ describe('StreamRenderer', () => {
   it('should render step events in verbose mode', () => {
     renderer.setVerbose(true);
     renderer.render({ type: 'step-start', stepNumber: 1 });
-    expect(stdoutOutput).toContain('Step 1');
+    expect(stdoutOutput).toContain('step 1');
   });
 
   it('should render guardrail events in verbose mode', () => {
@@ -111,11 +154,10 @@ describe('StreamRenderer', () => {
       args: {},
       toolCallId: 'tc-1',
     });
-    // Should have a newline to end text stream before tool output
     expect(stdoutOutput).toContain('thinking...\n');
   });
 
-  it('should render usage summary', () => {
+  it('should render compact usage summary', () => {
     renderer.renderUsage({
       inputTokens: 1234,
       outputTokens: 567,
@@ -124,12 +166,10 @@ describe('StreamRenderer', () => {
       duration: 2400,
       cost: 0.004,
     });
-    expect(stdoutOutput).toContain('1,234');
-    expect(stdoutOutput).toContain('567');
-    expect(stdoutOutput).toContain('1,801');
-    expect(stdoutOutput).toContain('Tools: 3');
+    expect(stdoutOutput).toContain('1,801 tokens');
     expect(stdoutOutput).toContain('2.4s');
     expect(stdoutOutput).toContain('$0.0040');
+    expect(stdoutOutput).toContain('3 tools');
   });
 
   it('should handle finish event after text stream', () => {
@@ -156,6 +196,21 @@ describe('StreamRenderer', () => {
       result: longResult,
       toolCallId: 'tc-1',
     });
-    expect(stdoutOutput).toContain('...');
+    expect(stdoutOutput).toContain('…');
+  });
+
+  describe('pauseSpinner / resumeSpinner', () => {
+    it('should stop the spinner on pauseSpinner', () => {
+      renderer.render({ type: 'agent-start', agentName: 'Test' });
+      stderrOutput = '';
+      renderer.pauseSpinner();
+      expect(stderrOutput).toContain('\r\x1b[K');
+    });
+
+    it('should restart the spinner on resumeSpinner', () => {
+      stderrOutput = '';
+      renderer.resumeSpinner('Working...');
+      expect(stderrOutput).toContain('Working...');
+    });
   });
 });
