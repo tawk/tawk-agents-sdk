@@ -21,7 +21,7 @@
  * 
  * @author Tawk.to
  * @license MIT
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 import {
@@ -629,11 +629,12 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           }
           
           if (!guardrailResult.passed && canRetry && guardrailRetryCount < MAX_GUARDRAIL_RETRIES) {
-            // Guardrail failed but we can retry - add feedback and loop
+            // Guardrail failed but we can retry - add feedback as user message
+            // (not system, which breaks Anthropic when interleaved with user/assistant)
             guardrailRetryCount++;
             state.messages.push({
-              role: 'system',
-              content: guardrailResult.feedback || 'Please regenerate your response.'
+              role: 'user',
+              content: `[System] ${guardrailResult.feedback || 'Please regenerate your response.'}`
             });
             continue;
           }
@@ -794,10 +795,11 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           
           state._toolsDisabledDueToTokenLimit = false;
           
-          // Add transfer context as system message (optional: remove if too verbose)
+          // Add transfer context as user message (not system, which breaks
+          // Anthropic when interleaved with user/assistant messages)
           if (nextStep.reason) {
             state.messages.push({
-              role: 'system',
+              role: 'user',
               content: `[Transfer] Transferred to ${nextStep.newAgent.name}. Reason: ${nextStep.reason}${nextStep.context ? `. Context: ${nextStep.context}` : ''}`,
             });
           }
@@ -1044,9 +1046,11 @@ export class AgenticRunner<TContext = any, TOutput = string> extends RunHooks<TC
           state.messages = [...originalUserMessage];
           state._toolsDisabledDueToTokenLimit = false;
 
+          // Add transfer context as user message (not system, which breaks
+          // Anthropic when interleaved with user/assistant messages)
           if (nextStep.reason) {
             state.messages.push({
-              role: 'system',
+              role: 'user',
               content: `[Transfer] Transferred to ${nextStep.newAgent.name}. Reason: ${nextStep.reason}${nextStep.context ? `. Context: ${nextStep.context}` : ''}`,
             });
           }

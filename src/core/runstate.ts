@@ -24,7 +24,7 @@
  * 
  * @author Tawk.to
  * @license MIT
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 import type { Agent } from './agent';

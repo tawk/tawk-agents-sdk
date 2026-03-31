@@ -8,7 +8,7 @@
  * @module tawk-agents-sdk
  * @author Tawk.to
  * @license MIT
- * @version 1.0.0
+ * @version 3.0.0
  * 
  * @example Basic Agent
  * ```typescript
@@ -126,6 +126,13 @@ export {
   runWithTraceContext,
 } from './tracing/context';
 
+// Tracing utilities
+export {
+  withFunctionSpan,
+  withHandoffSpan,
+  withGuardrailSpan,
+} from './tracing/tracing-utils';
+
 // Langfuse initialization
 export {
   initializeLangfuse as initLangfuse,
@@ -178,7 +185,8 @@ export {
 
 // Safe execution
 export {
-  safeExecute
+  safeExecute,
+  safeExecuteWithTimeout,
 } from './helpers/safe-execute';
 
 export type {
@@ -216,6 +224,21 @@ export type {
   Prettify,
   UnwrapPromise,
 } from './types/helpers';
+
+// ============================================
+// ERROR CLASSES
+// ============================================
+
+export {
+  MaxTurnsExceededError,
+  GuardrailTripwireTriggered,
+  ToolExecutionError,
+  HandoffError,
+  backgroundResult,
+  isBackgroundResult,
+} from './types/types';
+
+export type { BackgroundResult } from './types/types';
 
 // ============================================
 // TOOLS & AI UTILITIES
