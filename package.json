@@ -63,16 +63,12 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:basic": "jest unit/core/agent",
-    "test:multi": "jest unit/core/multi-agent",
-    "test:stream": "jest unit/core/streaming",
     "test:guards": "jest unit/guardrails",
-    "test:tracing": "jest unit/tracing",
-    "test:tools": "jest unit/tools",
     "test:core": "jest unit/core",
-    "e2e": "echo 'E2E tests pending migration to v3.0.0 API'",
-    "cli": "ts-node --transpile-only bin/tawk-cli.ts",
-    "example": "ts-node examples/complete-examples.ts",
-    "lint": "eslint src --ext .ts",
+    "e2e": "echo 'E2E tests require API keys. See tests/e2e/README.md'",
+    "cli": "tsx bin/tawk-cli.ts",
+    "example": "ts-node examples/all-features.ts",
+    "lint": "eslint src/",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "prepublish": "npm run build && npm test"
   },
@@ -116,10 +112,12 @@
     "eslint": "^9.17.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.9",
+    "@clack/prompts": "^1.1.0",
     "picocolors": "^1.1.1",
     "prettier": "^3.4.2",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.2"
   }
 }
