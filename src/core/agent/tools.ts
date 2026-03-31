@@ -8,12 +8,12 @@
  * **Features**:
  * - Simple tool() function for creating tools
  * - Type-safe tool definitions
- * - AI SDK v5 compatibility
+ * - AI SDK v6 compatibility
  * - Zod schema and JSON Schema validation support
  * 
  * @author Tawk.to
  * @license MIT
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 import type { CoreTool, FlexibleInputSchema } from './types';
@@ -34,7 +34,7 @@ import type { CoreTool, FlexibleInputSchema } from './types';
  * @param {FlexibleInputSchema} config.inputSchema - Schema for validating tool inputs
  * @param {Function} config.execute - Function that executes the tool logic
  * @param {boolean | Function} [config.enabled] - Whether the tool is enabled (can be dynamic)
- * @returns {CoreTool} Tool definition compatible with AI SDK v5
+ * @returns {CoreTool} Tool definition compatible with AI SDK v6
  * 
  * @example Basic Tool with Zod Schema
  * ```typescript
