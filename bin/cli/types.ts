@@ -2,9 +2,11 @@
  * Shared CLI types for tawk-cli
  */
 
-import type { ModelMessage } from 'ai';
-import type { Agent } from '../../src';
+import type { ModelMessage, LanguageModel } from 'ai';
+import type { Agent, CoreTool } from '../../src';
 import type { Usage } from '../../src/core/usage';
+import type { MCPServerManager } from '../../src/mcp/enhanced';
+import type { ResolvedConfig } from './config';
 
 /** Simple in-memory message store for the CLI REPL */
 export class CLISession {
@@ -35,6 +37,9 @@ export interface CLIOptions {
   noStream: boolean;
   verbose: boolean;
   maxTurns: number;
+  systemPrompt?: string;
+  appendSystemPrompt?: string;
+  mcpConfig?: string;
 }
 
 export interface CLIState {
@@ -47,6 +52,17 @@ export interface CLIState {
   turnCount: number;
   verbose: boolean;
   modelId: string;
+  toolWrapper?: (name: string, tool: CoreTool) => CoreTool;
+  permissionsGranted: boolean;
+
+  // Config
+  config: ResolvedConfig;
+  systemPrompt: string;
+  model: LanguageModel;
+
+  // MCP
+  mcpManager?: MCPServerManager;
+  mcpTools: Record<string, CoreTool>;
 }
 
 export interface AgentPreset {
