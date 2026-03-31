@@ -221,7 +221,7 @@ export interface ModelSettings {
 export interface ToolDefinition {
   description: string;
   parameters?: z.ZodSchema<any>; // For backward compatibility
-  inputSchema?: z.ZodSchema<any>; // AI SDK v5 standard
+  inputSchema?: z.ZodSchema<any>; // AI SDK v6 standard
   execute: (args: any, context?: any) => Promise<any> | any | BackgroundResult<any>;
 
   // Optional: MCP tool info

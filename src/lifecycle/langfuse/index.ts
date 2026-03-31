@@ -30,7 +30,7 @@
  * @see {@link https://langfuse.com Langfuse Documentation}
  * @author Tawk.to
  * @license MIT
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 import { Langfuse } from 'langfuse';
