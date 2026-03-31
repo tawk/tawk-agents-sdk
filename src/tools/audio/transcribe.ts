@@ -12,7 +12,7 @@ import type { LanguageModel } from 'ai';
 import { z } from 'zod';
 import { safeFetch } from '../../helpers/safe-fetch';
 
-// Tool definition type (AI SDK v5 compatible)
+// Tool definition type (AI SDK v6 compatible)
 type CoreTool = {
   description?: string;
   inputSchema: z.ZodSchema<any>;
