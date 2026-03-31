@@ -53,8 +53,8 @@ agent.on('agent_start', (context, agent) => {
   console.log('Context:', context.context);
 });
 
-agent.on('agent_transfer', (context, nextAgent) => {
-  console.log(`Transferring to ${nextAgent.name}`);
+agent.on('agent_handoff', (context, nextAgent) => {
+  console.log(`Handing off to ${nextAgent.name}`);
 });
 
 agent.on('agent_tool_start', (context, tool) => {
@@ -77,7 +77,7 @@ const result = await run(agent, 'Hello!');
 
 1. **`agent_start`** - Emitted when agent starts execution
 2. **`agent_end`** - Emitted when agent finishes
-3. **`agent_transfer`** - Emitted when agent transfers to another agent
+3. **`agent_handoff`** - Emitted when agent hands off to another agent
 4. **`agent_tool_start`** - Emitted when agent starts executing a tool
 5. **`agent_tool_end`** - Emitted when agent finishes executing a tool
 
@@ -90,7 +90,7 @@ const result = await run(agent, 'Hello!');
 ### Basic Usage
 
 ```typescript
-import { Agent, run } from '@tawk.to/tawk-agents-sdk';
+import { Agent, run, RunHooks } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'support-agent',
@@ -107,11 +107,11 @@ class CustomRunner extends RunHooks {
     this.on('agent_start', (context, agent) => {
       console.log(`[RUN] Agent ${agent.name} started`);
     });
-    
-    this.on('agent_transfer', (context, fromAgent, toAgent) => {
-      console.log(`[RUN] Transfer: ${fromAgent.name} → ${toAgent.name}`);
+
+    this.on('agent_handoff', (context, fromAgent, toAgent) => {
+      console.log(`[RUN] Handoff: ${fromAgent.name} → ${toAgent.name}`);
     });
-    
+
     this.on('agent_tool_start', (context, agent, tool) => {
       console.log(`[RUN] ${agent.name} called ${tool.name}`);
     });
@@ -126,7 +126,7 @@ class CustomRunner extends RunHooks {
 
 1. **`agent_start`** - Emitted when any agent starts in the run
 2. **`agent_end`** - Emitted when any agent ends in the run
-3. **`agent_transfer`** - Emitted when a transfer occurs
+3. **`agent_handoff`** - Emitted when a handoff occurs
 4. **`agent_tool_start`** - Emitted when any tool starts
 5. **`agent_tool_end`** - Emitted when any tool ends
 
@@ -140,7 +140,7 @@ class CustomRunner extends RunHooks {
 interface AgentHookEvents<TContext, TOutput> {
   agent_start: [context: RunContextWrapper<TContext>, agent: Agent<TContext, TOutput>];
   agent_end: [context: RunContextWrapper<TContext>, output: TOutput];
-  agent_transfer: [context: RunContextWrapper<TContext>, nextAgent: Agent<any, any>];
+  agent_handoff: [context: RunContextWrapper<TContext>, nextAgent: Agent<any, any>];
   agent_tool_start: [context: RunContextWrapper<TContext>, tool: { name: string; args: any }];
   agent_tool_end: [context: RunContextWrapper<TContext>, tool: { name: string; args: any }, result: any];
 }
@@ -152,7 +152,7 @@ interface AgentHookEvents<TContext, TOutput> {
 interface RunHookEvents<TContext, TOutput> {
   agent_start: [context: RunContextWrapper<TContext>, agent: Agent<TContext, TOutput>];
   agent_end: [context: RunContextWrapper<TContext>, agent: Agent<TContext, TOutput>, output: TOutput];
-  agent_transfer: [context: RunContextWrapper<TContext>, fromAgent: Agent<any, any>, toAgent: Agent<any, any>];
+  agent_handoff: [context: RunContextWrapper<TContext>, fromAgent: Agent<any, any>, toAgent: Agent<any, any>];
   agent_tool_start: [context: RunContextWrapper<TContext>, agent: Agent<TContext, TOutput>, tool: { name: string; args: any }];
   agent_tool_end: [context: RunContextWrapper<TContext>, agent: Agent<TContext, TOutput>, tool: { name: string; args: any }, result: any];
 }
@@ -244,10 +244,10 @@ const triageAgent = new Agent({
   subagents: [knowledgeAgent, actionAgent]
 });
 
-// Monitor transfers
-triageAgent.on('agent_transfer', (context, nextAgent) => {
+// Monitor handoffs
+triageAgent.on('agent_handoff', (context, nextAgent) => {
   console.log(`Triage routing to: ${nextAgent.name}`);
-  
+
   // Log to monitoring system
   monitoring.logTransfer({
     from: 'triage',
@@ -391,13 +391,13 @@ await withTrace('Support Request', async (trace) => {
 
 ```typescript
 class AgentHooks<TContext, TOutput> extends EventEmitter {
-  // Register handlers
+  // Convenience registration methods
   onStart(handler: (context, agent) => void): this;
   onEnd(handler: (context, output) => void): this;
-  onTransfer(handler: (context, nextAgent) => void): this;
+  onHandoff(handler: (context, nextAgent) => void): this;
   onToolStart(handler: (context, tool) => void): this;
   onToolEnd(handler: (context, tool, result) => void): this;
-  
+
   // Standard EventEmitter methods
   on(event: string, handler: Function): this;
   once(event: string, handler: Function): this;
@@ -410,13 +410,13 @@ class AgentHooks<TContext, TOutput> extends EventEmitter {
 
 ```typescript
 class RunHooks<TContext, TOutput> extends EventEmitter {
-  // Register handlers
+  // Convenience registration methods
   onAgentStart(handler: (context, agent) => void): this;
   onAgentEnd(handler: (context, agent, output) => void): this;
-  onAgentTransfer(handler: (context, fromAgent, toAgent) => void): this;
+  onAgentHandoff(handler: (context, fromAgent, toAgent) => void): this;
   onToolStart(handler: (context, agent, tool) => void): this;
   onToolEnd(handler: (context, agent, tool, result) => void): this;
-  
+
   // Standard EventEmitter methods
   on(event: string, handler: Function): this;
   once(event: string, handler: Function): this;

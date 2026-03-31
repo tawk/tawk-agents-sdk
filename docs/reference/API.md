@@ -9,12 +9,9 @@ Complete API documentation for the Tawk Agents SDK.
 - [Execution Functions](#execution-functions)
   - [run](#run)
   - [runStream](#runstream)
-  - [raceAgents](#raceagents)
-- [Sessions](#sessions)
 - [Guardrails](#guardrails)
 - [Tools](#tools)
 - [MCP Integration](#mcp-integration)
-- [Approvals](#approvals)
 - [Tracing](#tracing)
 - [Types](#types)
 
@@ -45,31 +42,47 @@ interface AgentConfig<TContext = any, TOutput = string> {
   model: LanguageModel;
   instructions: string | ((context: RunContextWrapper<TContext>) => string | Promise<string>);
 
-  // Optional
+  // Capabilities
   tools?: Record<string, CoreTool>;
   subagents?: Agent<TContext, any>[];
   transferDescription?: string;
   guardrails?: Guardrail<TContext>[];
-  mcpServers?: MCPServerConfig[];
-  maxSteps?: number;
-  modelSettings?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    presencePenalty?: number;
-    frequencyPenalty?: number;
-  };
-  outputSchema?: z.ZodSchema<TOutput>;
+
+  // Configuration groups
+  output?: AgentOutputConfig<TOutput>;
+  modelSettings?: ModelSettings;
+  execution?: ExecutionConfig;
+  hooks?: AgentHooksConfig<TContext>;
 }
-```
 
-#### Static Methods
+interface AgentOutputConfig<TOutput = string> {
+  schema?: z.ZodSchema<TOutput>;
+  toon?: boolean;
+}
 
-```typescript
-// Factory method
-static create<TContext, TOutput>(
-  config: AgentConfig<TContext, TOutput>
-): Agent<TContext, TOutput>
+interface ModelSettings {
+  temperature?: number;
+  topP?: number;
+  responseTokens?: number;
+  maxTokens?: number;
+  maxInputTokens?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+}
+
+interface ExecutionConfig {
+  maxSteps?: number;
+  stopWhen?: StopCondition | StopCondition[];
+  activeTools?: string[];
+  prepareStep?: PrepareStepFunction;
+  toolCallRepair?: ToolCallRepairFunction;
+  tokenizer?: (text: string) => number | Promise<number>;
+}
+
+interface AgentHooksConfig<TContext = any> {
+  onStepFinish?: (step: StepResult) => void | Promise<void>;
+  shouldFinish?: (context: TContext, toolResults: any[]) => boolean;
+}
 ```
 
 #### Instance Methods
@@ -84,8 +97,8 @@ asTool(options?: {
 // Clone agent with overrides
 clone(overrides: Partial<AgentConfig<TContext, TOutput>>): Agent<TContext, TOutput>
 
-// Cleanup (close MCP connections, etc.)
-async cleanup(): Promise<void>
+// Dispose (close MCP connections, etc.)
+async dispose(): Promise<void>
 ```
 
 #### Properties
@@ -107,7 +120,7 @@ Execute an agent and return the final result.
 ```typescript
 async function run<TContext = any, TOutput = string>(
   agent: Agent<TContext, TOutput>,
-  input: string | CoreMessage[] | RunState<TContext, any>,
+  input: string | ModelMessage[] | RunState<TContext, any>,
   options?: RunOptions<TContext>
 ): Promise<RunResult<TOutput>>
 ```
@@ -116,9 +129,9 @@ async function run<TContext = any, TOutput = string>(
 
 ```typescript
 interface RunOptions<TContext = any> {
-  session?: Session<TContext>;
   context?: TContext;
   maxTurns?: number;
+  stream?: boolean;
 }
 ```
 
@@ -130,13 +143,15 @@ interface RunResult<TOutput = string> {
   messages: ModelMessage[];
   steps: StepResult[];
   metadata: {
-    totalTokens: number;
-    promptTokens: number;
-    completionTokens: number;
-    finishReason: string;
-    totalToolCalls: number;
-    transferChain?: string[];
+    totalTokens?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    finishReason?: string;
+    totalToolCalls?: number;
+    handoffChain?: string[];
     agentMetrics?: AgentMetric[];
+    raceParticipants?: string[];
+    raceWinners?: string[];
   };
   state?: RunState<any, any>;
 }
@@ -160,9 +175,7 @@ async function runStream<TContext = any, TOutput = string>(
 interface StreamResult<TOutput = string> {
   textStream: AsyncIterable<string>;
   fullStream: AsyncIterable<StreamEvent>;
-  finalOutput: Promise<TOutput>;
-  messages: Promise<CoreMessage[]>;
-  metadata: Promise<RunMetadata>;
+  completed: Promise<RunResult<TOutput>>;
 }
 ```
 
@@ -171,109 +184,16 @@ interface StreamResult<TOutput = string> {
 ```typescript
 type StreamEvent =
   | { type: 'text-delta'; textDelta: string }
+  | { type: 'tool-call-start'; toolName: string; toolCallId: string }
   | { type: 'tool-call'; toolName: string; args: any; toolCallId: string }
   | { type: 'tool-result'; toolName: string; result: any; toolCallId: string }
-  | { type: 'transfer'; from: string; to: string; reason?: string }
-  | { type: 'finish'; finalOutput: string }
-  | { type: 'error'; error: string };
-```
-
-### raceAgents
-
-Run multiple agents in parallel and return the fastest response.
-
-```typescript
-async function raceAgents<TContext = any, TOutput = string>(
-  agents: Agent<TContext, TOutput>[],
-  input: string | ModelMessage[],
-  options?: RunOptions<TContext> & { timeoutMs?: number }
-): Promise<RunResult<TOutput> & { winningAgent: Agent<TContext, TOutput> }>
-```
-
----
-
-## Sessions
-
-### Session Interface
-
-```typescript
-interface Session<TContext = any> {
-  readonly id: string;
-  addMessages(messages: CoreMessage[]): Promise<void>;
-  getHistory(): Promise<CoreMessage[]>;
-  clear(): Promise<void>;
-  getMetadata(): Promise<Record<string, any>>;
-  updateMetadata(metadata: Record<string, any>): Promise<void>;
-}
-```
-
-### MemorySession
-
-In-memory session storage (development).
-
-```typescript
-class MemorySession<TContext = any> implements Session<TContext> {
-  constructor(
-    id: string,
-    maxMessages?: number,
-    summarizationConfig?: SummarizationConfig
-  )
-}
-```
-
-### RedisSession
-
-Redis-backed session storage (production).
-
-```typescript
-class RedisSession<TContext = any> implements Session<TContext> {
-  constructor(id: string, config: RedisSessionConfig)
-  
-  refreshTTL(): Promise<void> // Refresh time-to-live
-}
-```
-
-**RedisSessionConfig**:
-
-```typescript
-interface RedisSessionConfig {
-  redis: Redis;
-  maxMessages?: number;
-  ttl?: number; // seconds
-  keyPrefix?: string;
-}
-```
-
-### DatabaseSession
-
-MongoDB-backed session storage (production).
-
-```typescript
-class DatabaseSession<TContext = any> implements Session<TContext> {
-  constructor(id: string, config: DatabaseSessionConfig)
-}
-```
-
-**DatabaseSessionConfig**:
-
-```typescript
-interface DatabaseSessionConfig {
-  db: Db; // MongoDB Db instance
-  collectionName?: string;
-  maxMessages?: number;
-}
-```
-
-### HybridSession
-
-Redis + MongoDB session storage (production).
-
-```typescript
-class HybridSession<TContext = any> implements Session<TContext> {
-  constructor(id: string, config: HybridSessionConfig)
-  
-  syncToDatabase(): Promise<void> // Manual sync Redis to MongoDB
-}
+  | { type: 'agent-start'; agentName: string }
+  | { type: 'agent-end'; agentName: string }
+  | { type: 'transfer'; from: string; to: string; reason: string }
+  | { type: 'guardrail-check'; guardrailName: string; passed: boolean }
+  | { type: 'step-start'; stepNumber: number }
+  | { type: 'step-complete'; stepNumber: number }
+  | { type: 'finish'; finishReason?: string };
 ```
 
 ---
@@ -355,19 +275,6 @@ function topicRelevanceGuardrail<TContext>(config: {
   model: LanguageModel;
   allowedTopics: string[];
   threshold?: number; // 0-10
-}): Guardrail<TContext>
-```
-
-#### formatValidationGuardrail
-
-Validate content format (JSON, XML, YAML, Markdown).
-
-```typescript
-function formatValidationGuardrail<TContext>(config: {
-  name?: string;
-  type: 'input' | 'output';
-  format: 'json' | 'xml' | 'yaml' | 'markdown';
-  schema?: z.ZodSchema; // Optional Zod schema for JSON
 }): Guardrail<TContext>
 ```
 
@@ -459,73 +366,6 @@ function tool<TArgs = any, TResult = any>(config: {
 }): CoreTool
 ```
 
-### toolWithApproval
-
-Wrap a tool with approval logic.
-
-```typescript
-function toolWithApproval(
-  tool: CoreTool,
-  approvalConfig: {
-    needsApproval?: (
-      context: any,
-      args: any,
-      callId: string
-    ) => Promise<boolean> | boolean;
-    approvalMetadata?: {
-      severity?: 'low' | 'medium' | 'high' | 'critical';
-      category?: string;
-      requiredRole?: string;
-      reason?: string;
-    };
-  }
-): CoreTool
-```
-
-### RAG Tools
-
-#### createPineconeSearchTool
-
-Create a tool for searching Pinecone vector database.
-
-```typescript
-function createPineconeSearchTool(config: PineconeSearchConfig): CoreTool
-```
-
-**PineconeSearchConfig**:
-
-```typescript
-interface PineconeSearchConfig {
-  indexUrl: string;
-  apiKey: string;
-  embeddingModel: EmbeddingModel<string>;
-  namespace?: string; // default: 'default'
-  apiVersion?: string; // default: '2025-10'
-  embeddingProviderOptions?: Record<string, any>;
-  metadataFilter?: Record<string, any>;
-  useTOON?: boolean; // default: true
-  toonThreshold?: {
-    minDocuments?: number;
-    minSizeChars?: number;
-  };
-  enableCache?: boolean; // default: true
-  cacheKeyGenerator?: (query: string) => string;
-  logger?: (message: string, ...args: any[]) => void;
-}
-```
-
-#### createPineconeSearchToolWithCache
-
-Create a search tool and get cache management controls.
-
-```typescript
-function createPineconeSearchToolWithCache(config: PineconeSearchConfig): {
-  tool: CoreTool;
-  clearCache: () => void;
-  getCacheSize: () => number;
-}
-```
-
 ---
 
 ## MCP Integration
@@ -537,8 +377,12 @@ Manage MCP servers.
 ```typescript
 class MCPServerManager {
   registerServer(config: MCPServerConfig): Promise<void>
-  getTools(): Promise<Record<string, ToolDefinition>>
-  getServerTools(serverName: string): Promise<Record<string, ToolDefinition>>
+  getAllTools(): Promise<Record<string, CoreTool>>
+  getServerTools(serverName: string): Promise<Record<string, CoreTool>>
+  getServer(name: string): MCPServer | undefined
+  refreshAll(): Promise<void>
+  getServerCount(): number
+  getServerNames(): string[]
   shutdown(): Promise<void>
 }
 ```
@@ -548,78 +392,12 @@ class MCPServerManager {
 ```typescript
 interface MCPServerConfig {
   name: string;
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'http';
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   url?: string;
 }
-```
-
-### Global MCP Functions
-
-```typescript
-// Register a global MCP server
-async function registerMCPServer(config: MCPServerConfig): Promise<void>
-
-// Get tools from all registered MCP servers
-async function getMCPTools(): Promise<Record<string, ToolDefinition>>
-
-// Get global MCP manager instance
-function getGlobalMCPManager(): MCPServerManager
-
-// Shutdown all MCP servers
-async function shutdownMCPServers(): Promise<void>
-```
-
----
-
-## Approvals
-
-### ApprovalManager
-
-Manage approval workflows.
-
-```typescript
-class ApprovalManager {
-  requiresApproval(toolName: string, config?: ApprovalConfig): boolean
-  
-  async requestApproval(
-    toolName: string,
-    args: any,
-    config: ApprovalConfig
-  ): Promise<ApprovalResponse>
-  
-  getPendingApproval(token: string): PendingApproval | undefined
-  submitApproval(token: string, response: ApprovalResponse): void
-  getPendingApprovals(): PendingApproval[]
-  clearExpired(maxAge?: number): void
-}
-```
-
-### Approval Handlers
-
-```typescript
-// CLI-based approval
-function createCLIApprovalHandler(): ApprovalHandler
-
-// Webhook-based approval
-function createWebhookApprovalHandler(
-  webhookUrl: string,
-  apiKey?: string
-): ApprovalHandler
-
-// Auto-approve (for testing)
-function createAutoApproveHandler(): ApprovalHandler
-
-// Auto-reject (for testing)
-function createAutoRejectHandler(): ApprovalHandler
-```
-
-### Global Approval Function
-
-```typescript
-function getGlobalApprovalManager(): ApprovalManager
 ```
 
 ---
@@ -629,10 +407,10 @@ function getGlobalApprovalManager(): ApprovalManager
 ### Langfuse Integration
 
 ```typescript
-// Initialize Langfuse
-function initializeLangfuse(config?: {
-  publicKey?: string;
-  secretKey?: string;
+// Initialize Langfuse (explicit config required)
+function initLangfuse(config: {
+  publicKey: string;
+  secretKey: string;
   baseUrl?: string;
 }): Langfuse | null
 
@@ -651,14 +429,15 @@ async function shutdownLangfuse(): Promise<void>
 ```typescript
 // Create a trace wrapper
 async function withTrace<T>(
-  options: {
-    name: string;
-    userId?: string;
-    sessionId?: string;
+  name: string,
+  fn: (trace: any) => Promise<T>,
+  options?: {
     input?: any;
     metadata?: Record<string, any>;
-  },
-  fn: (trace: any) => Promise<T>
+    tags?: string[];
+    sessionId?: string;
+    userId?: string;
+  }
 ): Promise<T>
 
 // Wrap function with tracing span
@@ -678,29 +457,32 @@ async function withFunctionSpan<T>(
 ### Core Message Types
 
 ```typescript
-type CoreMessage = 
-  | { role: 'system'; content: string }
-  | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string }
-  | { role: 'tool'; content: string; toolCallId: string };
+// ModelMessage is re-exported from the 'ai' package
+type ModelMessage = import('ai').ModelMessage;
 ```
 
 ### Run State
 
 ```typescript
 class RunState<TContext = any, TAgent = Agent<TContext, any>> {
-  readonly originalInput: string | ModelMessage[];
-  readonly currentAgent: TAgent;
+  originalInput: string | ModelMessage[];
+  currentAgent: TAgent;
   messages: ModelMessage[];
-  readonly stepNumber: number;
-  readonly currentTurn: number;
-  readonly maxTurns: number;
-  readonly trace?: any;
-  
+  stepNumber: number;
+  currentTurn: number;
+  maxTurns: number;
+  trace?: any;
+  context?: TContext;
+  handoffChain: string[];
+
+  static async create(config): Promise<RunState>;
   recordStep(step: StepResult): void;
   incrementTurn(): void;
   isMaxTurnsExceeded(): boolean;
-  hasInterruptions(): boolean;
+  trackHandoff(agentName: string): void;
+  updateAgentMetrics(metric: AgentMetric): void;
+  getDuration(): number;
+  toJSON(): object;
 }
 ```
 
@@ -709,12 +491,12 @@ class RunState<TContext = any, TAgent = Agent<TContext, any>> {
 ```typescript
 interface AgentMetric {
   agentName: string;
-  steps: number;
+  turns: number;
   toolCalls: number;
-  transfers: number;
+  duration: number;
   tokens: {
-    prompt: number;
-    completion: number;
+    input: number;
+    output: number;
     total: number;
   };
 }
@@ -727,19 +509,19 @@ interface AgentMetric {
 ### Streaming Types
 
 ```typescript
-// Event name types for streaming
-type RunItemStreamEventName = 
-  | 'message'
-  | 'tool_call'
-  | 'tool_result'
-  | 'transfer'
-  | 'guardrail'
-  | 'step_complete';
+// Event name types for run item stream events
+type RunItemStreamEventName =
+  | 'message_output_created'
+  | 'handoff_requested'
+  | 'handoff_occurred'
+  | 'tool_called'
+  | 'tool_output'
+  | 'reasoning_item_created';
 
 // Union of all streaming events
-type RunStreamEvent = 
-  | RunRawModelStreamEvent 
-  | RunItemStreamEvent 
+type RunStreamEvent =
+  | RunRawModelStreamEvent
+  | RunItemStreamEvent
   | RunAgentUpdatedStreamEvent;
 ```
 
@@ -747,39 +529,9 @@ type RunStreamEvent =
 
 ```typescript
 // Result type for safe execution
-type SafeExecuteResult<T> = [error: null, result: T] | [error: Error, result: null];
-```
-
-### Race Agents Types
-
-```typescript
-interface RaceAgentsOptions<TContext = any> {
-  maxTurns?: number;
-  context?: TContext;
-  timeout?: number;
-}
-```
-
-### Approval Types
-
-```typescript
-interface ApprovalRequest {
-  toolName: string;
-  args: any;
-  metadata?: Record<string, any>;
-}
-
-interface ApprovalDecision {
-  approved: boolean;
-  reason?: string;
-  modifiedArgs?: any;
-}
-
-type ApprovalFunction<TContext = any> = (
-  context: TContext,
-  args: any,
-  toolName: string
-) => Promise<boolean> | boolean;
+// Index 0: error (null on success, Error or unknown on failure)
+// Index 1: result (value on success, null on failure)
+type SafeExecuteResult<T> = [Error | unknown | null, T | null];
 ```
 
 ### Background Result Types
@@ -798,7 +550,8 @@ function isBackgroundResult<T>(value: any): value is BackgroundResult<T>;
 ### MCP Types
 
 ```typescript
-type MCPToolFilter = (tool: MCPTool) => boolean;
+// MCPServerConfig and CoreTool types are used for MCP tool integration
+// See MCP Integration section above for full type definitions
 ```
 
 ---

@@ -102,7 +102,6 @@ npm run cli -- --agent coder --verbose               # Coder preset
 - Multi-agent transfers
 - Guardrails validation
 - Langfuse tracing
-- Session management
 - Complete end-to-end flow
 
 **[Complete Architecture](./reference/COMPLETE_ARCHITECTURE.md)** `60 min`
@@ -157,9 +156,8 @@ graph TD
     F --> D
     G --> D
 
-    H --> I[Session Storage]
-    I --> J[Langfuse Trace]
-    J --> K[Return Result]
+    H --> I[Langfuse Trace]
+    I --> J[Return Result]
 ```
 
 **[See detailed flow diagrams](./reference/FLOW_DIAGRAMS.md)**
@@ -181,8 +179,7 @@ tawk-agents-sdk/
 │   │   ├── transfers.ts  # Multi-agent transfer system
 │   │   ├── runstate.ts   # Mutable execution state
 │   │   └── usage.ts      # Token tracking and cost estimation
-│   ├── guardrails/       # 10 validators (length, PII, content-safety, etc.)
-│   ├── sessions/         # Memory, Redis, MongoDB, Hybrid sessions
+│   ├── guardrails/       # 9 built-in guardrails (length, PII, content-safety, etc.)
 │   ├── lifecycle/        # Event hooks + Langfuse integration
 │   ├── tracing/          # AsyncLocalStorage-based trace context
 │   ├── helpers/          # Message builders, safe-execute, safe-fetch, sanitize
@@ -190,7 +187,7 @@ tawk-agents-sdk/
 │   ├── mcp/              # Model Context Protocol integration
 │   └── index.ts          # Barrel exports
 ├── examples/             # Example agents
-├── tests/                # 197 unit tests (12 suites)
+├── tests/                # 198 unit tests
 └── docs/                 # This documentation
 ```
 
@@ -205,9 +202,8 @@ tawk-agents-sdk/
 | **Agents** | Autonomous AI agents with tools | [Getting Started](./getting-started/GETTING_STARTED.md) |
 | **Multi-Agent** | Coordinator + specialist pattern | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md#3-multi-agent-transfer-flow) |
 | **Tools** | Parallel execution, safe wrapper | [Features](./guides/FEATURES.md#tools) |
-| **Guardrails** | Input/output validation, 10 types | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md#4-guardrails-validation-flow) |
+| **Guardrails** | Input/output validation, 9 built-in types | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md#4-guardrails-validation-flow) |
 | **Tracing** | Complete Langfuse observability | [Tracing Guide](./guides/TRACING.md) |
-| **Sessions** | Persistent conversation history | [Flow Diagrams](./reference/FLOW_DIAGRAMS.md#6-session-management-flow) |
 | **CLI** | Interactive REPL for testing | [Interactive CLI](#interactive-cli) |
 
 ### Advanced Features
@@ -303,23 +299,11 @@ const agent = new Agent({
 ```typescript
 import { initLangfuse, Agent, run } from '@tawk.to/tawk-agents-sdk';
 
-initLangfuse(); // Reads LANGFUSE_* env vars
+initLangfuse({ publicKey: 'pk-lf-...', secretKey: 'sk-lf-...' });
 
 const agent = new Agent({ /* ... */ });
 const result = await run(agent, 'Query');
 // Automatically traced to Langfuse
-```
-
-### With Sessions
-
-```typescript
-import { MemorySession } from '@tawk.to/tawk-agents-sdk';
-
-const session = new MemorySession('user-123', 50);
-
-const result1 = await run(agent, 'My name is Alice', { session });
-const result2 = await run(agent, 'What is my name?', { session });
-// Agent maintains context: "Your name is Alice"
 ```
 
 ---
@@ -330,7 +314,7 @@ const result2 = await run(agent, 'What is my name?', { session });
 |--------|--------|
 | **Build** | Passing |
 | **Lint** | Zero errors |
-| **Tests** | 197 passing (12 suites) |
+| **Tests** | 198 passing |
 | **Type Safety** | TypeScript strict mode |
 | **AI SDK** | v6 (`ai@^6.0.0`) |
 
@@ -358,7 +342,6 @@ const result2 = await run(agent, 'What is my name?', { session });
 | **Multi-agent** | [Flow Diagrams #3](./reference/FLOW_DIAGRAMS.md#3-multi-agent-transfer-flow) |
 | **Guardrails** | [Flow Diagrams #4](./reference/FLOW_DIAGRAMS.md#4-guardrails-validation-flow) |
 | **Tracing** | [Tracing Guide](./guides/TRACING.md) |
-| **Sessions** | [Flow Diagrams #6](./reference/FLOW_DIAGRAMS.md#6-session-management-flow) |
 | **RAG** | [RAG Guide](./guides/AGENTIC_RAG.md) |
 | **HITL** | [HITL Guide](./guides/HUMAN_IN_THE_LOOP.md) |
 | **Design principles** | [Design Principles](./reference/DESIGN_PRINCIPLES.md) |

@@ -13,7 +13,6 @@
 - [Multi-Agent Flow](#multi-agent-flow)
 - [Guardrails Flow](#guardrails-flow)
 - [Tracing & Observability](#tracing--observability)
-- [Session Management](#session-management)
 - [Tool Execution](#tool-execution)
 - [Complete End-to-End Flow](#complete-end-to-end-flow)
 - [Component Details](#component-details)
@@ -37,14 +36,12 @@ graph TB
     
     subgraph "State Management"
         RunState[📊 RunState]
-        Session[💾 Session]
         Usage[📈 Usage Tracking]
     end
-    
+
     subgraph "Execution Layer"
         Exec[🔄 Execution Engine]
         Transfer[🔀 Transfer System]
-        HITL[👤 Human-in-Loop]
     end
     
     subgraph "Observability"
@@ -54,27 +51,23 @@ graph TB
     
     subgraph "External"
         LLM[🧠 LLM Provider]
-        Storage[💾 Storage]
     end
-    
+
     User -->|run/runStream| Agent
     Agent --> Runner
     Runner --> Guards
     Guards --> Exec
     Exec --> Tools
     Exec --> Transfer
-    Exec --> HITL
-    
+
     Runner <--> RunState
-    RunState <--> Session
     RunState --> Usage
-    
+
     Runner --> Trace
     Trace --> Langfuse
-    
+
     Exec <--> LLM
-    Session <--> Storage
-    
+
     style Agent fill:#4a90e2
     style Runner fill:#e74c3c
     style Guards fill:#9b59b6
@@ -96,11 +89,7 @@ src/
 │   ├── transfers.ts           # Multi-agent transfer system
 │   ├── runstate.ts            # State management
 │   ├── usage.ts               # Token tracking
-│   ├── result.ts              # Result types
-│   ├── approvals.ts           # HITL approvals
-│   ├── coordination.ts        # Agent coordination
-│   ├── race-agents.ts         # Race patterns
-│   └── hitl.ts                # Human-in-the-loop
+│   └── result.ts              # Result types
 │
 ├── guardrails/                # Safety & validation
 │   └── index.ts               # All guardrails
@@ -109,10 +98,6 @@ src/
 │   ├── context.ts             # Tracing context
 │   ├── tracing.ts             # Tracing logic
 │   └── tracing-utils.ts       # Utilities
-│
-├── sessions/                  # State persistence
-│   ├── session.ts             # Session interface
-│   └── index.ts               # Exports
 │
 ├── lifecycle/                 # Event system
 │   ├── events.ts              # Hook definitions
@@ -129,15 +114,12 @@ src/
 ├── helpers/                   # Utilities
 │   ├── message.ts             # Message helpers
 │   ├── safe-execute.ts        # Safe tool execution
+│   ├── safe-fetch.ts          # SSRF-safe HTTP client
+│   ├── sanitize.ts            # Error sanitization
 │   └── toon.ts                # Token optimization
 │
 ├── mcp/                       # Model Context Protocol
-│   ├── index.ts               # MCP client
-│   ├── enhanced.ts            # Enhanced features
-│   └── utils.ts               # MCP utilities
-│
-├── approvals/                 # HITL system
-│   └── index.ts               # Approval manager
+│   └── enhanced.ts            # MCP server manager
 │
 ├── types/                     # TypeScript types
 │   ├── types.ts               # Core types
@@ -498,73 +480,6 @@ graph TB
 
 ---
 
-## 💾 Session Management
-
-### Session Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant A as Agent
-    participant R as Runner
-    participant S as Session
-    participant DB as Storage
-    
-    U->>A: run(input, {session})
-    A->>R: execute()
-    
-    R->>S: getMessages()
-    S->>DB: Load history
-    DB-->>S: messages[]
-    S-->>R: messages[]
-    
-    Note over R: Execute agent
-    
-    R->>R: Generate response
-    
-    R->>S: addMessages(new)
-    S->>DB: Save messages
-    
-    R-->>A: result
-    A-->>U: result
-    
-    Note over U: Next turn
-    
-    U->>A: run(input2, {session})
-    Note over R: History available
-```
-
-### Session Types
-
-```mermaid
-graph LR
-    subgraph "Memory Session"
-        M1[In-Memory Storage]
-        M2[Fast Access]
-        M3[No Persistence]
-    end
-    
-    subgraph "Redis Session"
-        R1[Redis Storage]
-        R2[Distributed]
-        R3[Persistent]
-    end
-    
-    App[Application] --> M1
-    App --> R1
-    
-    M1 --> M2
-    M2 --> M3
-    
-    R1 --> R2
-    R2 --> R3
-    
-    style M1 fill:#4a90e2
-    style R1 fill:#e74c3c
-```
-
----
-
 ## 🔧 Tool Execution
 
 ### Tool Call Flow
@@ -645,12 +560,7 @@ flowchart TD
     CreateRunner --> CreateState[Create RunState]
     CreateState --> CreateTrace[🔍 Create Langfuse Trace]
     
-    CreateTrace --> LoadSession{Session<br/>Exists?}
-    LoadSession -->|Yes| LoadHist[💾 Load History]
-    LoadSession -->|No| NewHist[Create New History]
-    
-    LoadHist --> PrepMsg[Prepare Messages]
-    NewHist --> PrepMsg
+    CreateTrace --> PrepMsg[Prepare Messages]
     
     PrepMsg --> InputGuard{Input<br/>Guardrails?}
     
@@ -677,17 +587,9 @@ flowchart TD
     CheckResp -->|Transfer| HandleTransfer
     
     ExecTools --> TraceTools[📊 Trace Each Tool]
-    TraceTools --> ToolApproval{HITL<br/>Approval?}
-    
-    ToolApproval -->|Yes| AskApproval[👤 Request Approval]
-    ToolApproval -->|No| RunTools[Run Tools]
-    
-    AskApproval --> ApprovalResp{Approved?}
-    ApprovalResp -->|Yes| RunTools
-    ApprovalResp -->|No| SkipTool[Skip Tool]
-    
+    TraceTools --> RunTools[Run Tools]
+
     RunTools --> AddResults[Add Tool Results]
-    SkipTool --> AddResults
     
     AddResults --> EndSpan1[End Agent Span]
     EndSpan1 --> StartLoop
@@ -698,28 +600,23 @@ flowchart TD
     IsolateCtx --> StartLoop
     
     OutputGuard{Output<br/>Guardrails?} -->|Yes| RunOutputG[🛡️ Run Output Guardrails]
-    OutputGuard -->|No| SaveSession
-    
+    OutputGuard -->|No| EndTrace
+
     RunOutputG --> OGPass{Pass?}
     OGPass -->|❌ No| GenFeedback2[Generate Feedback]
-    OGPass -->|✅ Yes| SaveSession
-    
+    OGPass -->|✅ Yes| EndTrace
+
     GenFeedback2 --> CheckTurns2{Max Turns?}
     CheckTurns2 -->|Yes| MaxTurnsError
     CheckTurns2 -->|No| StartLoop
-    
-    SaveSession{Session?} -->|Yes| SaveMsg[💾 Save Messages]
-    SaveSession -->|No| EndTrace
-    
-    SaveMsg --> EndTrace[End Trace]
-    EndTrace --> FlushTrace[🔍 Flush to Langfuse]
+
+    EndTrace[End Trace] --> FlushTrace[🔍 Flush to Langfuse]
     FlushTrace --> ReturnResult([✅ Return Result])
-    
+
     style Start fill:#50c878
     style LLMCall fill:#e74c3c
     style ExecTools fill:#27ae60
     style HandleTransfer fill:#f39c12
-    style SaveMsg fill:#f39c12
     style FlushTrace fill:#f39c12
     style ReturnResult fill:#ffd700
     style MaxTurnsError fill:#e74c3c
@@ -798,7 +695,7 @@ flowchart TD
 - `steps` - Execution steps
 - `usage` - Token usage
 - `currentAgent` - Active agent
-- `transferChain` - Agent path
+- `handoffChain` - Agent path
 - `agentMetrics` - Per-agent stats
 
 ### 6. Guardrails (`guardrails/index.ts`)
@@ -829,18 +726,7 @@ flowchart TD
 - Token tracking
 - Error tracking
 
-### 8. Session Manager (`sessions/`)
-
-**Types**:
-- `MemorySession` - In-memory storage
-- `RedisSession` - Redis storage (external)
-
-**Methods**:
-- `getMessages()` - Load history
-- `addMessage()` - Save message
-- `clear()` - Clear history
-
-### 9. Tool System (`tools/`)
+### 8. Tool System (`tools/`)
 
 **Built-in Tools**:
 - Audio: Text-to-speech, transcription
@@ -849,11 +735,11 @@ flowchart TD
 - RAG: Pinecone search
 - Rerank: Result reranking
 
-### 10. Lifecycle Hooks (`lifecycle/`)
+### 9. Lifecycle Hooks (`lifecycle/`)
 
 **Hook Events**:
 - Agent hooks: `onStart`, `onEnd`, `onError`
-- Run hooks: `onStepStart`, `onStepFinish`, `onToolCall`
+- Run hooks: `agent_start`, `agent_end`, `agent_handoff`, `agent_tool_start`, `agent_tool_end`
 
 ---
 
@@ -872,7 +758,6 @@ graph LR
     State --> Guardrails
     Guardrails --> Output
     
-    State -.-> Session
     State -.-> Usage
     Runner -.-> Tracing
     
@@ -892,9 +777,8 @@ graph LR
 5. **Transfers** - Multi-agent coordination
 6. **Guardrails** - Safety & validation
 7. **Tracing** - Observability via Langfuse
-8. **Sessions** - Conversation persistence
-9. **Tools** - Extensible functionality
-10. **Lifecycle** - Event-driven hooks
+8. **Tools** - Extensible functionality
+9. **Lifecycle** - Event-driven hooks
 
 ---
 

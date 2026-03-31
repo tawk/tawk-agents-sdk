@@ -24,7 +24,7 @@ const agent = new Agent({ name: 'Assistant', instructions: '...' });
 const result = await run(agent, 'Hello!');
 ```
 
-Everything else (guardrails, sessions, transfers, tracing) is opt-in.
+Everything else (guardrails, transfers, tracing) is opt-in.
 
 ### 2. Agent-Driven Execution
 
@@ -39,7 +39,7 @@ Following Anthropic's principle that agents should *autonomously direct processe
 Following Anthropic's recommendation to *start with the simplest solution that works*:
 
 - `run(agent, input)` — one function call for the common case
-- Sensible defaults everywhere (maxSteps=10, maxTurns=50)
+- Sensible defaults everywhere (`execution: { maxSteps: 10 }`, `maxTurns=50`)
 - Advanced features (streaming, hooks, guardrails) layer on without changing the core API
 
 ### 4. Transparency
@@ -97,7 +97,7 @@ const coordinator = new Agent({
 
 ### Guardrails
 
-Input and output validation with 10 built-in validators. Guardrails run in parallel for performance. Failed output guardrails inject feedback and re-enter the loop, giving the agent a chance to fix its response.
+Input and output validation with 9 built-in validators. Guardrails run in parallel for performance. Failed output guardrails inject feedback and re-enter the loop, giving the agent a chance to fix its response.
 
 ```typescript
 const agent = new Agent({
@@ -143,10 +143,6 @@ Execute independent subtasks concurrently.
 ```typescript
 // Tool-level: multiple tool calls in one step run via Promise.all
 await run(agent, 'Get weather in Tokyo, London, and New York');
-
-// Agent-level: race or parallel execution
-const fastest = await raceAgents([agent1, agent2, agent3], query);
-const all = await runParallel([agent1, agent2], query);
 ```
 
 ### 4. Orchestrator-Worker
@@ -233,24 +229,20 @@ Key design decisions:
 | Output guardrails | Validation | Validation + retry with feedback |
 | Lifecycle hooks | `AgentHooks` subclass | `AgentHooks` + `RunHooks` |
 | Tracing | OpenAI dashboard | Langfuse integration |
-| Structured output | `output_type` | `outputSchema` + `Output.*` |
+| Structured output | `output_type` | `output: { schema }` |
 | Context (DI) | Generic `TContext` | Generic `TContext` |
 | Clone | `agent.clone()` | `agent.clone()` |
 | Agent as tool | `agent.as_tool()` | `agent.asTool()` |
 | MCP integration | Yes | stdio + HTTP + auth |
-| Streaming | Yes | `runStream()` + `executeStream()` |
-| State pause/resume | RunState for HITL | `RunState` with pending approvals |
+| Streaming | Yes | `runStream()` |
+| State pause/resume | RunState for HITL | `RunState` |
 | Max turns | `max_turns` | `maxTurns` |
 
 ### Features Beyond OpenAI SDK
 
 | Feature | Description |
 |---------|-------------|
-| **Race agents** | `raceAgents()` — run multiple agents, use fastest response |
-| **Parallel agents** | `runParallel()` — run agents concurrently, collect all results |
-| **Judge pattern** | `runWithJudge()` — agents compete, judge picks best |
-| **4 session backends** | Memory, Redis, MongoDB, Hybrid |
-| **10 guardrail types** | Length, PII, content safety, toxicity, sentiment, language, topic, format, rate limit, custom |
+| **9 guardrail types** | Length, PII, content safety, toxicity, sentiment, language, topic, rate limit, custom |
 | **TOON optimization** | 18-33% token reduction for structured tool results |
 | **Token budget tracking** | `maxTokens` (total) and `maxInputTokens` with auto-pruning |
 | **Interactive CLI** | REPL with streaming, tool visualization, multi-agent transfers |
@@ -264,7 +256,7 @@ Key design decisions:
 
 | Practice | Implementation |
 |----------|---------------|
-| Input validation | 10 built-in guardrail validators |
+| Input validation | 9 built-in guardrail validators |
 | PII detection | `piiDetectionGuardrail` — regex-based, no external calls |
 | Content safety | `contentSafetyGuardrail` — LLM-based moderation |
 | Toxicity detection | `toxicityGuardrail` — LLM-scored with configurable threshold |
@@ -272,7 +264,6 @@ Key design decisions:
 | API key protection | `sanitizeError()` redacts keys matching `/key\|secret\|token\|password/i` |
 | SSRF protection | `safeFetch` validates URLs, blocks private IPs, limits redirects |
 | Path traversal protection | `resolveSafePath()` in CLI tools bounds paths to CWD |
-| Approval workflows | HITL with CLI, webhook, auto-approve, and auto-reject handlers |
 
 ---
 

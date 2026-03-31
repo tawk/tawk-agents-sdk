@@ -24,7 +24,6 @@ Key features and capabilities of Tawk Agents SDK.
 
 - **Synchronous** - Standard `run()` execution
 - **Streaming** - Real-time `runStream()` with events
-- **Session-Based** - Conversational with memory
 
 ## AI Capabilities
 
@@ -33,7 +32,7 @@ Key features and capabilities of Tawk Agents SDK.
 Generate embeddings for semantic search:
 
 ```typescript
-import { generateEmbeddingAI, createEmbeddingTool } from '@tawk.to/tawk-agents-sdk';
+import { generateEmbeddingAI, generateEmbeddingsAI, createEmbeddingTool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 // Single embedding
@@ -107,19 +106,15 @@ const agent = new Agent({
 
 ### RAG Tools
 
-Search Pinecone vector database:
+Generate embeddings for vector search using `createEmbeddingTool`:
 
 ```typescript
-import { createPineconeSearchTool } from '@tawk.to/tawk-agents-sdk';
+import { createEmbeddingTool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
   tools: {
-    search: createPineconeSearchTool({
-      indexUrl: process.env.PINECONE_INDEX_URL!,
-      apiKey: process.env.PINECONE_API_KEY!,
-      embeddingModel: openai.embedding('text-embedding-3-small')
-    })
+    embed: createEmbeddingTool(openai.embedding('text-embedding-3-small'))
   }
 });
 ```
@@ -136,6 +131,8 @@ import {
   piiDetectionGuardrail,
   lengthGuardrail,
   languageGuardrail,
+  topicRelevanceGuardrail,
+  toxicityGuardrail,
   customGuardrail
 } from '@tawk.to/tawk-agents-sdk';
 
@@ -193,42 +190,6 @@ const agent = new Agent({
 const result = await run(agent, input);
 ```
 
-## Session Management
-
-### Storage Options
-
-- **MemorySession** - In-memory (development)
-- **RedisSession** - Redis-backed (production)
-- **DatabaseSession** - MongoDB-backed (production)
-- **HybridSession** - Redis + MongoDB (production)
-
-```typescript
-import { RedisSession, DatabaseSession, HybridSession } from '@tawk.to/tawk-agents-sdk';
-
-// Redis
-const redisSession = new RedisSession('user-123', {
-  redis: redisClient,
-  ttl: 3600,
-  maxMessages: 50
-});
-
-// MongoDB
-const dbSession = new DatabaseSession('user-123', {
-  db,
-  collectionName: 'sessions',
-  maxMessages: 100
-});
-
-// Hybrid
-const hybridSession = new HybridSession('user-123', {
-  redis: redisClient,
-  db,
-  dbCollectionName: 'sessions',
-  redisTTL: 3600,
-  maxMessages: 100
-});
-```
-
 ## Observability
 
 ### Langfuse Tracing
@@ -236,10 +197,10 @@ const hybridSession = new HybridSession('user-123', {
 Track all agent interactions:
 
 ```typescript
-import { initializeLangfuse } from '@tawk.to/tawk-agents-sdk';
+import { initLangfuse } from '@tawk.to/tawk-agents-sdk';
 
 // Initialize once at app startup
-initializeLangfuse({
+initLangfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
   secretKey: process.env.LANGFUSE_SECRET_KEY
 });
@@ -255,23 +216,6 @@ View in Langfuse dashboard:
 - Error monitoring
 
 ## Multi-Agent Patterns
-
-### Race Agents
-
-Run multiple agents in parallel, use fastest response:
-
-```typescript
-import { raceAgents } from '@tawk.to/tawk-agents-sdk';
-
-const result = await raceAgents(
-  [fastAgent, smartAgent, cheapAgent],
-  'What is the capital of France?',
-  { timeoutMs: 5000 }
-);
-
-console.log(`Winner: ${result.winningAgent.name}`);
-console.log(result.finalOutput);
-```
 
 ### Agent Transfers
 
@@ -311,7 +255,7 @@ const agent = new Agent({
       }
     })
   },
-  useTOON: true  // ✅ Enable automatic TOON encoding
+  output: { toon: true }  // ✅ Enable automatic TOON encoding
 });
 
 // Tool results are automatically encoded to TOON format
@@ -325,7 +269,7 @@ const result = await run(agent, 'Get 100 records');
 import { encodeTOON, decodeTOON } from '@tawk.to/tawk-agents-sdk';
 
 const data = { users: [{ id: 1, name: 'Alice' }] };
-const toon = encodeTOON(data); // 42% smaller than JSON
+const toon = encodeTOON(data);
 const decoded = decodeTOON(toon);
 ```
 
@@ -346,62 +290,24 @@ const decoded = decodeTOON(toon);
 Use Model Context Protocol tools:
 
 ```typescript
-import { registerMCPServer, getMCPTools, getGlobalMCPManager } from '@tawk.to/tawk-agents-sdk';
+import { MCPServerManager } from '@tawk.to/tawk-agents-sdk';
 
-await registerMCPServer({
+const manager = new MCPServerManager();
+
+await manager.registerServer({
   name: 'filesystem',
+  transport: 'stdio',
   command: 'npx',
   args: ['-y', '@modelcontextprotocol/server-filesystem'],
   env: { ...process.env }
 });
 
-// Get tools from all registered servers
-const mcpTools = await getMCPTools();
-
-// Or get tools from a specific server
-const manager = getGlobalMCPManager();
+// Get tools from a specific server
 const filesystemTools = await manager.getServerTools('filesystem');
 
 const agent = new Agent({
-  tools: { ...mcpTools }
+  tools: { ...filesystemTools }
 });
-```
-
-### Human-in-the-Loop
-
-Require approval for critical actions:
-
-```typescript
-import { createCLIApprovalHandler, getGlobalApprovalManager } from '@tawk.to/tawk-agents-sdk';
-
-const agent = new Agent({
-  name: 'approval-agent',
-  model: openai('gpt-4o'),
-  instructions: 'You can perform actions that require approval.',
-  tools: {
-    deleteFile: {
-      description: 'Delete a file (requires approval)',
-      inputSchema: z.object({ path: z.string() }),
-      execute: async ({ path }) => {
-        const approvalManager = getGlobalApprovalManager();
-        const approved = await approvalManager.requestApproval(
-          'deleteFile',
-          { path },
-          {
-            requiredForTools: ['deleteFile'],
-            requestApproval: createCLIApprovalHandler()
-          }
-        );
-        if (!approved.approved) {
-          throw new Error('Approval denied');
-        }
-        return `File ${path} deleted`;
-      }
-    }
-  }
-});
-
-const result = await run(agent, 'Delete important.txt');
 ```
 
 ## Next Steps

@@ -94,12 +94,12 @@ const result = await run(agent, 'What is 15 + 23?');
 console.log(result.finalOutput); // "The result is 38"
 ```
 
-## Adding Session Memory
+## Multi-Turn Conversations
 
-Sessions maintain conversation history:
+Pass conversation history as a message array to maintain context across turns:
 
 ```typescript
-import { Agent, run, MemorySession } from '@tawk.to/tawk-agents-sdk';
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
@@ -108,14 +108,16 @@ const agent = new Agent({
   instructions: 'You are a helpful assistant.'
 });
 
-const session = new MemorySession('user-123', 50); // id, maxMessages
+// First turn
+const result1 = await run(agent, 'My name is Alice');
 
-// First message
-await run(agent, 'My name is Alice', { session });
-
-// Second message - remembers context
-const result = await run(agent, 'What is my name?', { session });
-console.log(result.finalOutput); // "Your name is Alice"
+// Multi-turn: pass conversation history as messages
+const result2 = await run(agent, [
+  { role: 'user' as const, content: 'My name is Alice' },
+  { role: 'assistant' as const, content: result1.finalOutput },
+  { role: 'user' as const, content: 'What is my name?' }
+]);
+console.log(result2.finalOutput); // "Your name is Alice"
 ```
 
 ## Streaming Responses

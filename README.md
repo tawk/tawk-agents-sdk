@@ -7,9 +7,9 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green)](https://nodejs.org/)
 [![AI SDK](https://img.shields.io/badge/AI_SDK-v6-purple)](https://sdk.vercel.ai)
 
-Enterprise-grade multi-agent orchestration with parallel tool execution, guardrails, session management, and Langfuse observability.
+Enterprise-grade multi-agent orchestration with parallel tool execution, guardrails, and Langfuse observability.
 
-> **v3.0.0** — AI SDK v6 migration, interactive CLI, 197 tests.
+> **v3.0.0** — AI SDK v6 migration, interactive CLI, comprehensive unit tests.
 
 ---
 
@@ -18,9 +18,8 @@ Enterprise-grade multi-agent orchestration with parallel tool execution, guardra
 - **True Agentic Architecture** — Autonomous agents with context-isolated transfers
 - **Parallel Tool Execution** — Automatic parallel execution via `Promise.all`
 - **Multi-Agent Coordination** — Specialized agents with seamless transfers
-- **Smart Guardrails** — 10 validators with LLM-based content safety
+- **Smart Guardrails** — 9 built-in guardrails with LLM-based content safety
 - **Complete Observability** — Hierarchical Langfuse tracing with token tracking
-- **Session Management** — Memory, Redis, MongoDB with auto-summarization
 - **Streaming Support** — Real-time responses with granular events
 - **Interactive CLI** — REPL for testing agents with live tool visualization
 - **TypeScript First** — Strict mode, 100% type safety
@@ -127,19 +126,8 @@ const agent = new Agent({
 ```typescript
 import { initLangfuse, Agent, run } from '@tawk.to/tawk-agents-sdk';
 
-initLangfuse(); // Reads LANGFUSE_* env vars — tracing is automatic
+initLangfuse({ publicKey: 'pk-lf-...', secretKey: 'sk-lf-...' });
 const result = await run(agent, 'Hello!');
-```
-
-### With Sessions
-
-```typescript
-import { Agent, run, MemorySession } from '@tawk.to/tawk-agents-sdk';
-
-const session = new MemorySession('user-123', 50);
-await run(agent, 'My name is Alice', { session });
-const result = await run(agent, 'What is my name?', { session });
-// "Your name is Alice"
 ```
 
 ---
@@ -204,8 +192,7 @@ src/
 │   ├── transfers.ts   # Multi-agent transfer system
 │   ├── runstate.ts    # Mutable execution state
 │   └── usage.ts       # Token tracking and cost estimation
-├── guardrails/        # 10 validators (length, PII, content-safety, etc.)
-├── sessions/          # Memory, Redis, MongoDB, Hybrid sessions
+├── guardrails/        # 9 built-in guardrails (length, PII, content-safety, etc.)
 ├── lifecycle/         # Event hooks + Langfuse integration
 ├── tracing/           # AsyncLocalStorage-based trace context
 ├── helpers/           # Message builders, safe-execute, safe-fetch, sanitize
@@ -219,7 +206,7 @@ src/
 ## Testing
 
 ```bash
-npm test              # 197 unit tests
+npm test              # 198 unit tests
 npm run test:coverage # With coverage report
 npm run lint          # ESLint on src/
 npm run build:check   # Type check only
@@ -228,7 +215,6 @@ npm run build         # Full build
 # Specific suites
 npm run test:core     # Core module tests
 npm run test:guards   # Guardrail tests
-npm run test:sessions # Session tests
 
 # E2E (requires API keys)
 npm run e2e
@@ -238,7 +224,7 @@ npm run e2e
 |--------|--------|
 | **Build** | Passing |
 | **Lint** | Zero errors |
-| **Tests** | 197 passing (12 suites) |
+| **Tests** | 198 passing |
 | **Type Safety** | Strict mode enabled |
 
 ---
@@ -257,9 +243,6 @@ LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
-# Sessions (optional)
-REDIS_URL=redis://localhost:6379
-MONGODB_URI=mongodb://localhost:27017/myapp
 ```
 
 ---

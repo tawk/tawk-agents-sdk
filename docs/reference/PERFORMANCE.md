@@ -72,7 +72,7 @@ const agent = new Agent({
       }
     })
   },
-  useTOON: true  // ✅ Enable automatic TOON encoding
+  output: { toon: true }  // ✅ Enable automatic TOON encoding
 });
 ```
 
@@ -94,7 +94,7 @@ const agent = new Agent({
       inputSchema: z.object({}),
       execute: async () => {
         const users = await db.users.find().toArray();
-        // Manual TOON encoding (42% smaller than JSON)
+        // Manual TOON encoding
         return encodeTOON(users);
       }
     })
@@ -114,34 +114,6 @@ const agent = new Agent({
 - Average: 20-25% token reduction
 - Latency: 10-20% faster in most scenarios
 
-## Session Management
-
-### Choose the Right Storage
-
-- **MemorySession**: Fastest, but not persistent
-- **RedisSession**: Fast, persistent, good for production
-- **DatabaseSession**: Slower, but more durable
-- **HybridSession**: Best of both worlds
-
-```typescript
-// For high-traffic production
-const session = new RedisSession('user-123', {
-  redis: redisClient,
-  ttl: 3600 // Cache for 1 hour
-});
-```
-
-### Limit Message History
-
-Limit stored messages to reduce context size:
-
-```typescript
-const session = new RedisSession('user-123', {
-  redis: redisClient,
-  maxMessages: 20 // Only keep last 20 messages
-});
-```
-
 ## Model Selection
 
 ### Use Faster Models for Simple Tasks
@@ -160,18 +132,6 @@ const smartAgent = new Agent({
 });
 ```
 
-### Race Agents for Best Performance
-
-Run multiple agents in parallel and use the fastest:
-
-```typescript
-const result = await raceAgents(
-  [fastAgent, smartAgent],
-  'Simple question',
-  { timeoutMs: 3000 }
-);
-```
-
 ## Guardrails
 
 ### Use Efficient Models
@@ -180,9 +140,13 @@ Use smaller models for guardrails:
 
 ```typescript
 // ✅ Efficient
-const result = await run(agent, input, {
-  inputGuardrails: [
-    contentSafetyGuardrail({ 
+const agent = new Agent({
+  name: 'SafeAgent',
+  model: openai('gpt-4o'),
+  instructions: 'You are helpful.',
+  guardrails: [
+    contentSafetyGuardrail({
+      type: 'output',
       model: openai('gpt-4o-mini') // Smaller, faster model
     })
   ]
@@ -195,8 +159,8 @@ Guardrails execute in parallel automatically:
 
 ```typescript
 // All guardrails execute simultaneously
-const result = await run(agent, input, {
-  inputGuardrails: [
+const agent = new Agent({
+  guardrails: [
     guardrail1,
     guardrail2,
     guardrail3
@@ -266,8 +230,9 @@ Monitor token usage to optimize costs:
 ```typescript
 const result = await run(agent, 'Hello');
 
-console.log('Tokens used:', result.metadata.usage.totalTokens);
-console.log('Cost:', calculateCost(result.metadata.usage));
+console.log('Tokens used:', result.metadata.totalTokens);
+console.log('Prompt tokens:', result.metadata.promptTokens);
+console.log('Completion tokens:', result.metadata.completionTokens);
 ```
 
 ### Monitor Performance
@@ -288,22 +253,9 @@ console.log(`Execution time: ${duration}ms`);
 
 The SDK automatically handles message format conversion for compatibility:
 
-**Problem**: Sessions return `ModelMessage[]` (includes UIMessage), but AI SDK's `generateText()` requires `ModelMessage[]`.
-
-**Solution**: SDK automatically converts `ModelMessage[]` to `ModelMessage[]` using `convertToModelMessages()`.
-
-```typescript
-// Sessions return ModelMessage[]
-const session = new MemorySession('user-123');
-const history = await session.getHistory(); // ModelMessage[]
-
-// SDK automatically converts to ModelMessage[] before calling generateText()
-const result = await run(agent, 'Hello', { session });
-// ✅ No errors - conversion happens automatically
-```
+**Solution**: SDK automatically converts messages to the format required by AI SDK's `generateText()` using `convertToModelMessages()`.
 
 **What gets converted:**
-- ✅ Session history (`ModelMessage[]` → `ModelMessage[]`)
 - ✅ Tool results (already `ModelMessage[]` compatible)
 - ✅ Transfer messages (preserved as `ModelMessage[]`)
 - ✅ User input (already `ModelMessage[]`)

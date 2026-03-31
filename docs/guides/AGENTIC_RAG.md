@@ -108,10 +108,10 @@ Your job:
 3. Transfer to the appropriate specialist agent(s) using SDK transfers
 
 Classification rules:
-- Technical queries → Hand off to Technical Retrieval Agent
-- General knowledge queries → Hand off to General Knowledge Agent
-- Domain-specific queries → Hand off to Domain Retrieval Agent
-- Multi-domain queries → Hand off to multiple agents
+- Technical queries → Transfer to Technical Retrieval Agent
+- General knowledge queries → Transfer to General Knowledge Agent
+- Domain-specific queries → Transfer to Domain Retrieval Agent
+- Multi-domain queries → Transfer to multiple agents
 
 IMPORTANT: Always use transfers to route queries. Do not try to answer queries yourself.`,
   tools: {
@@ -279,7 +279,7 @@ async function agenticRAG(query: string): Promise<AgenticRAGResult> {
   const result = await run(routerAgent, query, { maxTurns: 15 });
 
   // Extract information from result
-  const transferChain = result.metadata.transferChain || [];
+  const transferChain = result.metadata.handoffChain || [];
   const agentsUsed = [...new Set(transferChain)];
   
   // Extract document IDs from tool calls
@@ -404,7 +404,6 @@ Update router agent instructions to change routing logic without code changes. T
 - [Multi-Agent Orchestration Guide](./CORE_CONCEPTS.md#multi-agent-orchestration)
 - [Tool Calling Guide](./FEATURES.md#tool-calling)
 - [Guardrails Guide](./FEATURES.md#guardrails)
-- [E2E Test Example](../../tests/e2e/04-agentic-rag-e2e.test.ts)
 
 ---
 

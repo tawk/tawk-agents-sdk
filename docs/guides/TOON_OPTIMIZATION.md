@@ -11,14 +11,13 @@ TOON is a compact data format that provides **18-33% token reduction** compared 
 Enable automatic TOON encoding with a single config option:
 
 ```typescript
-import { Agent, run, tool, setDefaultModel } from '@tawk.to/tawk-agents-sdk';
+import { Agent, run, tool } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
-setDefaultModel(openai('gpt-4o-mini'));
-
 const agent = new Agent({
   name: 'Data Agent',
+  model: openai('gpt-4o-mini'),
   instructions: 'You analyze data and provide insights.',
   tools: {
     getLargeData: tool({
@@ -46,7 +45,7 @@ const agent = new Agent({
       }
     })
   },
-  useTOON: true  // ✅ Enable automatic TOON encoding
+  output: { toon: true }  // ✅ Enable automatic TOON encoding
 });
 
 const result = await run(agent, 'Get 50 records and summarize them');
@@ -57,7 +56,7 @@ console.log(result.finalOutput);
 
 ### Automatic Encoding
 
-When `useTOON: true` is set:
+When `output: { toon: true }` is set:
 
 1. **Tool Execution**: Tools return normal JavaScript objects/arrays
 2. **Automatic Encoding**: SDK automatically encodes tool results to TOON format
@@ -166,7 +165,7 @@ const agent = new Agent({
   name: 'My Agent',
   instructions: '...',
   tools: { ... },
-  useTOON: true  // Enable TOON for this agent
+  output: { toon: true }  // Enable TOON for this agent
 });
 ```
 
@@ -176,19 +175,19 @@ const agent = new Agent({
 // Enable for all data-heavy agents
 const dataAgent = new Agent({
   name: 'Data Agent',
-  useTOON: true,
+  output: { toon: true },
   // ...
 });
 
 const analyticsAgent = new Agent({
   name: 'Analytics Agent',
-  useTOON: true,
+  output: { toon: true },
   // ...
 });
 
 const reportingAgent = new Agent({
   name: 'Reporting Agent',
-  useTOON: true,
+  output: { toon: true },
   // ...
 });
 ```
@@ -199,7 +198,7 @@ const reportingAgent = new Agent({
 // Enable based on environment or feature flag
 const agent = new Agent({
   name: 'My Agent',
-  useTOON: process.env.ENABLE_TOON === 'true',
+  output: { toon: process.env.ENABLE_TOON === 'true' },
   // ...
 });
 ```
@@ -230,12 +229,12 @@ const decoded = decodeTOON(toonString);
 
 ### Tool-Level Control
 
-While `useTOON` applies to all tools, you can control encoding per tool:
+While `output.toon` applies to all tools, you can control encoding per tool with `useTOON` on individual tool definitions:
 
 ```typescript
 const agent = new Agent({
   name: 'Hybrid Agent',
-  useTOON: true,  // Enable for most tools
+  output: { toon: true },  // Enable for most tools
   tools: {
     // This tool's result will be TOON-encoded
     getLargeData: tool({
@@ -267,7 +266,7 @@ TOON encoding includes automatic error handling:
 // No errors thrown, graceful fallback
 const agent = new Agent({
   name: 'Safe Agent',
-  useTOON: true,
+  output: { toon: true },
   tools: {
     getData: tool({
       execute: async () => {
@@ -288,7 +287,7 @@ const agent = new Agent({
 // ✅ Good - Large data responses
 const dataAgent = new Agent({
   name: 'Data Agent',
-  useTOON: true,
+  output: { toon: true },
   tools: {
     getUsers: tool({
       execute: async () => {
@@ -301,7 +300,7 @@ const dataAgent = new Agent({
 // ❌ Not needed - Small responses
 const simpleAgent = new Agent({
   name: 'Simple Agent',
-  useTOON: false,  // Small responses, no benefit
+  output: { toon: false },  // Small responses, no benefit
   tools: {
     getStatus: tool({
       execute: async () => {
@@ -329,7 +328,7 @@ console.log('Cost:', calculateCost(result.metadata.totalTokens));
 // Test with TOON enabled
 const testAgent = new Agent({
   name: 'Test Agent',
-  useTOON: true,
+  output: { toon: true },
   // ...
 });
 
@@ -380,8 +379,7 @@ console.log('Performance:', result.metadata);
 
 See the examples directory for complete TOON usage examples:
 
-- `examples/advanced/11-toon-format.ts` - Manual TOON encoding
-- `tests/e2e/11-toon-optimization-e2e.test.ts` - E2E test with TOON
+- `examples/03-advanced/11-toon-format.ts` - Manual TOON encoding
 
 ## Summary
 
@@ -392,6 +390,6 @@ See the examples directory for complete TOON usage examples:
 - ✅ **Production-ready** - 100% reliability
 - ✅ **Cost savings** - 18-33% per query
 
-Enable `useTOON: true` on agents that return large structured data to reduce token usage and costs!
+Enable `output: { toon: true }` on agents that return large structured data to reduce token usage and costs!
 
 

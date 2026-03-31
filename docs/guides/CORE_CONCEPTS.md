@@ -136,14 +136,12 @@ graph TB
 - **Autonomous Flow**: No predefined paths - agent chooses its journey
 
 
-### Key Characteristics
-
 | Feature | Agentic Implementation |
 |---------|------------------------|
 | **Decision Making** | AI-driven and context-aware |
 | **Tool Execution** | Parallel by default |
 | **Flexibility** | Dynamic adaptation |
-| **State** | Complex RunState with interruption |
+| **State** | Complex RunState tracking |
 | **Transfers** | Autonomous delegation |
 
 ---
@@ -184,7 +182,7 @@ sequenceDiagram
 ### Tool Definition
 
 ```typescript
-const tool = tool({
+const myTool = tool({
   description: 'What the tool does',
   inputSchema: z.object({
     param: z.string()
@@ -367,27 +365,24 @@ graph TB
         ToolCall[Tool Execution]
         Transfer[Agent Transfer]
         Complete[Complete]
-        Interrupted[Interrupted]
     end
-    
+
     Input --> Running
     Messages --> Running
     Steps --> Running
     Metrics --> Running
-    
+
     Running --> ToolCall
     ToolCall --> Running
     Running --> Transfer
     Transfer --> Running
     Running --> Complete
-    Running --> Interrupted
-    
-    Interrupted -.Save.-> Storage[(Storage)]
+
+    Complete -.Save.-> Storage[(Storage)]
     Storage -.Resume.-> Running
-    
+
     style Running fill:#4a90e2
     style Complete fill:#27ae60
-    style Interrupted fill:#f39c12
 ```
 
 ### Interruption & Resumption
@@ -396,18 +391,16 @@ graph TB
 // Initial run
 const result1 = await run(agent, 'Start complex task');
 
-// Check if interrupted (e.g., needs approval)
-if (result1.state && result1.state.hasInterruptions()) {
-  // Save state
+// Save state if needed for continuation
+if (result1.state) {
   await saveToDatabase(result1.state);
-  
-  // ... later, after approval ...
-  
-  // Resume from saved state
+
+  // ... later, resume from saved state ...
+
   const savedState = await loadFromDatabase();
   const result2 = await run(agent, savedState);
-  
-  console.log('Completed:', result2.finalOutput);
+
+  console.log('Continued:', result2.finalOutput);
 }
 ```
 
@@ -427,11 +420,7 @@ stateDiagram-v2
     Running --> GuardrailCheck: Validate output
     GuardrailCheck --> Running: Pass
     GuardrailCheck --> Error: Fail
-    
-    Running --> Interrupted: Approval needed
-    Interrupted --> [*]: Save state
-    [*] --> Running: Resume
-    
+
     Running --> Complete: Done
     Complete --> [*]
     
@@ -521,37 +510,30 @@ sequenceDiagram
 ### Lifecycle Hooks
 
 ```typescript
-import { Agent, AgentHooks } from '@tawk.to/tawk-agents-sdk';
+import { Agent } from '@tawk.to/tawk-agents-sdk';
 
-class MonitoredAgent extends AgentHooks {
-  onStart(context: any) {
-    console.log('🚀 Agent starting');
-  }
-
-  onToolCall(context: any, toolName: string, args: any) {
-    console.log(`🔧 Calling: ${toolName}`);
-  }
-
-  onToolResult(context: any, toolName: string, result: any) {
-    console.log(`✅ Result: ${toolName}`);
-  }
-
-  onTransfer(fromAgent: string, toAgent: string) {
-    console.log(`🔄 Transfer: ${fromAgent} → ${toAgent}`);
-  }
-
-  onComplete(context: any, result: any) {
-    console.log('✅ Complete');
-  }
-
-  onError(context: any, error: Error) {
-    console.error('❌ Error:', error);
-  }
-}
-
-// Apply hooks to agent
+// Agent extends AgentHooks (EventEmitter), so use .on() directly
 const agent = new Agent({ /* config */ });
-Object.setPrototypeOf(agent, MonitoredAgent.prototype);
+
+agent.on('agent_start', (context, agent) => {
+  console.log('Agent starting');
+});
+
+agent.on('agent_tool_start', (context, tool) => {
+  console.log(`Calling: ${tool.name}`);
+});
+
+agent.on('agent_tool_end', (context, tool, result) => {
+  console.log(`Result: ${tool.name}`);
+});
+
+agent.on('agent_handoff', (context, nextAgent) => {
+  console.log(`Handoff → ${nextAgent.name}`);
+});
+
+agent.on('agent_end', (context, output) => {
+  console.log('Complete');
+});
 ```
 
 ---
@@ -570,8 +552,8 @@ Object.setPrototypeOf(agent, MonitoredAgent.prototype);
 
 ### 3. State is First-Class
 - Full state management with RunState
-- Interruption and resumption support
-- Perfect for human-in-the-loop patterns
+- State can be saved and resumed across calls
+- Perfect for multi-step workflows
 
 ### 4. Multi-Agent is Native
 - Agents can transfer to specialists
@@ -581,7 +563,7 @@ Object.setPrototypeOf(agent, MonitoredAgent.prototype);
 ### 5. Safety is Built-In
 - Guardrails at input and output
 - Context-based tool enabling
-- Approval workflows available
+- 9 built-in guardrail types
 
 ---
 

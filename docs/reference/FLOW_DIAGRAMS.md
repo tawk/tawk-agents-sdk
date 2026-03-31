@@ -11,8 +11,7 @@
 3. [Multi-Agent Transfer Flow](#3-multi-agent-transfer-flow)
 4. [Guardrails Validation Flow](#4-guardrails-validation-flow)
 5. [Langfuse Tracing Flow](#5-langfuse-tracing-flow)
-6. [Session Management Flow](#6-session-management-flow)
-7. [Complete End-to-End Flow](#7-complete-end-to-end-flow)
+6. [Complete End-to-End Flow](#6-complete-end-to-end-flow)
 
 ---
 
@@ -189,7 +188,7 @@ sequenceDiagram
     
     TR->>S: Transfer with filtered context
     
-    T->>T: Create Span "Agent: Specialist" (child of Coordinator)
+    T->>T: Create Span "Agent: Specialist" (sibling of Coordinator)
     S->>M2: generateText(filtered_messages, specialist_tools)
     M2-->>S: Perform analysis
     S-->>TR: Analysis complete
@@ -338,7 +337,6 @@ flowchart TD
     
     C --> E[lengthGuardrail]
     C --> F[piiDetectionGuardrail]
-    C --> G[formatValidationGuardrail]
     C --> H[rateLimitGuardrail]
     
     D --> I[contentSafetyGuardrail]
@@ -451,7 +449,7 @@ sequenceDiagram
     participant L as Langfuse
 
     U->>T: run(agent, query)
-    T->>T: initLangfuse()
+    T->>T: initLangfuse(config)
     T->>L: Create Trace
     
     T->>AS: Create Span "Agent: Main"
@@ -478,8 +476,11 @@ sequenceDiagram
 import { initLangfuse, Agent, run } from '@tawk.to/tawk-agents-sdk';
 import { openai } from '@ai-sdk/openai';
 
-// Initialize Langfuse (reads from env vars)
-initLangfuse();
+// Initialize Langfuse with explicit config
+initLangfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
 
 const agent = new Agent({
   name: 'TracedAgent',
@@ -500,99 +501,7 @@ const result = await run(agent, 'Hello!');
 
 ---
 
-## 6. Session Management Flow
-
-### Overview
-Persistent conversation history with automatic summarization.
-
-### Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant R as run()
-    participant S as Session
-    participant D as Storage (Redis/Memory)
-    participant A as Agent
-    participant M as LLM
-
-    U->>R: run(agent, "Hello", { session })
-    R->>S: getHistory()
-    S->>D: Load messages
-    D-->>S: Previous messages (if any)
-    
-    alt First interaction
-        S-->>R: Empty history
-    else Subsequent interaction
-        S-->>R: Previous conversation
-    end
-    
-    R->>A: Execute with history
-    A->>M: generateText(history + new message)
-    M-->>A: Response
-    
-    A->>S: addMessage(user message)
-    S->>D: Store message
-    A->>S: addMessage(assistant response)
-    S->>D: Store response
-    
-    alt History > maxMessages
-        Note over S: Automatic Summarization
-        S->>M: Summarize old messages
-        M-->>S: Summary
-        S->>D: Store summary, keep recent messages
-    end
-    
-    S-->>R: Updated history
-    R-->>U: Response
-```
-
-### Session Types
-
-```mermaid
-flowchart LR
-    A[Session Types] --> B[MemorySession]
-    A --> C[RedisSession]
-    A --> D[MongoDBSession]
-    
-    B --> E[In-memory storage<br/>Fast, temporary<br/>Dev/testing]
-    
-    C --> F[Redis storage<br/>Persistent, fast<br/>Production]
-    
-    D --> G[MongoDB storage<br/>Persistent, scalable<br/>Enterprise]
-    
-    style B fill:#e3f2fd
-    style C fill:#e8f5e9
-    style D fill:#fff3e0
-```
-
-### Code Example
-
-```typescript
-import { Agent, run, MemorySession } from '@tawk.to/tawk-agents-sdk';
-import { openai } from '@ai-sdk/openai';
-
-const agent = new Agent({
-  name: 'Assistant',
-  model: openai('gpt-4o')
-});
-
-// Create session for user
-const session = new MemorySession('user-123', 50);
-
-// First interaction
-const result1 = await run(agent, 'My name is Alice', { session });
-
-// Second interaction - agent remembers
-const result2 = await run(agent, 'What is my name?', { session });
-// Response: "Your name is Alice"
-
-// History automatically managed, summarized when needed
-```
-
----
-
-## 7. Complete End-to-End Flow
+## 6. Complete End-to-End Flow
 
 ### Overview
 All features working together in a production multi-agent system.
@@ -602,7 +511,6 @@ All features working together in a production multi-agent system.
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant S as Session
     participant T as Trace
     participant C as Coordinator
     participant IG as Input Guards
@@ -616,66 +524,60 @@ sequenceDiagram
     participant OG as Output Guards
     participant L as Langfuse
 
-    U->>S: Query with session
-    S-->>U: Load history
-    
     U->>T: run(coordinator, query)
     T->>L: Create Trace "Agent Run"
     T->>T: Create Span "Agent: Coordinator"
-    
+
     T->>IG: Validate input
     IG->>IG: Run all input guardrails
     IG-->>T: Passed ✓
-    
+
     T->>M1: Create GENERATION
     M1->>M1: generateText()
     M1-->>T: ToolCall: transfer_to_specialist
     T->>T: End GENERATION (with tokens)
-    
+
     TR->>TR: Filter context for isolation
-    
+
     T->>T: Create Span "Agent: Specialist" (nested)
-    
+
     T->>IG2: Validate specialist input
     IG2-->>T: Passed ✓
-    
+
     T->>M2: Create GENERATION
     M2->>M2: generateText()
     M2-->>T: ToolCall: analyzeData
     T->>T: End GENERATION (with tokens)
-    
+
     T->>Tool: Create Tool Span
     Tool->>Tool: Execute tool
     Tool-->>T: Result
     T->>T: End Tool Span
-    
+
     M2->>M2: Continue with tool result
     M2-->>T: Final specialist response
-    
+
     T->>OG2: Validate specialist output
-    
+
     par Specialist Output Guardrails
         OG2->>OG2: length_check (SPAN)
         OG2->>M2: content_safety (GENERATION)
     end
-    
+
     OG2-->>T: Passed ✓
     T->>T: End Specialist Span (with aggregated usage)
-    
+
     TR-->>C: Transfer result
     M1->>M1: Synthesize final response
-    
+
     T->>OG: Validate coordinator output
     OG-->>T: Passed ✓
-    
+
     T->>T: End Coordinator Span (with total usage)
-    
-    T->>S: Store messages
-    S-->>T: History updated
-    
+
     T->>L: Flush trace (complete hierarchy)
     T->>T: End Trace
-    
+
     T-->>U: RunResult with complete data
 ```
 
@@ -683,58 +585,56 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start([User Query]) --> Session[Session<br/>Load History]
-    Session --> Trace[Create Trace]
-    
+    Start([User Query]) --> Trace[Create Trace]
+
     Trace --> Coord[Coordinator Agent]
-    
+
     Coord --> IG1[Input Guardrails]
     IG1 -->|Valid| LLM1[LLM Generation]
     IG1 -->|Invalid| Error1[Return Error]
-    
+
     LLM1 --> Decision{Decision}
-    
+
     Decision -->|Use Tool| Tool1[Execute Tool]
     Decision -->|Transfer| Transfer[Transfer to Specialist]
     Decision -->|Direct| Response1[Generate Response]
-    
+
     Tool1 --> LLM1
-    
+
     Transfer --> SpecStart[Specialist Agent]
-    
+
     SpecStart --> IG2[Input Guardrails]
     IG2 -->|Valid| LLM2[LLM Generation]
     IG2 -->|Invalid| Error2[Return Error]
-    
+
     LLM2 --> Decision2{Decision}
     Decision2 -->|Use Tool| Tool2[Execute Specialist Tool]
     Decision2 -->|Direct| Response2[Generate Response]
-    
+
     Tool2 --> LLM2
-    
+
     Response2 --> OG2[Output Guardrails]
     OG2 -->|Valid| SpecEnd[End Specialist]
     OG2 -->|Invalid| Regen2[Regenerate]
-    
+
     Regen2 --> LLM2
-    
+
     SpecEnd --> BackCoord[Back to Coordinator]
     BackCoord --> Response1
-    
+
     Response1 --> OG1[Output Guardrails]
-    OG1 -->|Valid| Save[Save to Session]
+    OG1 -->|Valid| EndTrace[End Trace]
     OG1 -->|Invalid| Regen1[Regenerate]
-    
+
     Regen1 --> LLM1
-    
-    Save --> EndTrace[End Trace]
+
     EndTrace --> Langfuse[(Langfuse)]
-    
+
     EndTrace --> Return([Return Result])
-    
+
     Error1 --> Return
     Error2 --> BackCoord
-    
+
     style Start fill:#e1f5ff
     style Return fill:#c8e6c9
     style Langfuse fill:#fff9c4
@@ -753,7 +653,6 @@ flowchart TD
 3. **Multi-Agent**: Coordinator → Transfer → Specialist → Back → Final
 4. **Guardrails**: Input Validation → Process → Output Validation
 5. **Tracing**: Hierarchical spans tracking everything
-6. **Sessions**: Persistent history with auto-summarization
 
 ### Tracing Hierarchy
 
@@ -777,11 +676,10 @@ Trace: Agent Run
 
 ### Production Ready
 
-✅ **Complete observability** with Langfuse  
-✅ **Safety** with guardrails  
-✅ **Scalability** with multi-agent architecture  
-✅ **Memory** with session management  
-✅ **Performance** with parallel execution  
+✅ **Complete observability** with Langfuse
+✅ **Safety** with guardrails
+✅ **Scalability** with multi-agent architecture
+✅ **Performance** with parallel execution
 ✅ **Reliability** with comprehensive error handling
 
 ---

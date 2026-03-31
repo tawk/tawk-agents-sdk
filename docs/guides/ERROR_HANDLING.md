@@ -24,8 +24,7 @@ The SDK provides comprehensive error handling with specific error types for diff
 1. **Execution Errors** - Max turns, timeouts
 2. **Validation Errors** - Guardrails, input validation
 3. **Tool Errors** - Tool execution failures
-4. **Handoff Errors** - Agent delegation failures
-5. **Approval Errors** - Approval workflow failures
+4. **Transfer Errors** (`HandoffError`) - Agent delegation failures
 
 ---
 
@@ -44,10 +43,8 @@ try {
   });
 } catch (error) {
   if (error instanceof MaxTurnsExceededError) {
-    console.error('Agent exceeded max turns');
-    console.error('Current step:', error.stepNumber);
-    console.error('Max turns:', error.maxTurns);
-    
+    console.error('Agent exceeded max turns:', error.message);
+
     // Recovery: Increase maxTurns or simplify query
     const retry = await run(agent, 'Simplified query...', {
       maxTurns: 20
@@ -57,9 +54,7 @@ try {
 ```
 
 **Properties:**
-- `stepNumber` - Current step when error occurred
-- `maxTurns` - Maximum turns allowed
-- `message` - Error message with details
+- `message` - Error message including the max turns limit
 
 ---
 
@@ -88,8 +83,8 @@ try {
 
 **Properties:**
 - `guardrailName` - Name of the guardrail that triggered
-- `type` - 'input' or 'output'
 - `message` - Reason for blocking
+- `metadata` - Optional metadata from the guardrail
 
 ---
 
@@ -118,8 +113,8 @@ try {
 
 **Properties:**
 - `toolName` - Name of the tool that failed
-- `args` - Arguments passed to the tool
-- `originalError` - Original error from tool execution
+- `originalError` - Original error from tool execution (optional)
+- `message` - Error message with details
 
 ---
 
@@ -144,40 +139,10 @@ try {
 ```
 
 **Properties:**
-- `fromAgent` - Agent that attempted handoff
-- `toAgent` - Target agent for handoff
-- `reason` - Reason for handoff failure
-
----
-
-### ApprovalRequiredError
-
-Thrown when an approval is required but not provided.
-
-```typescript
-import { run, ApprovalRequiredError } from '@tawk.to/tawk-agents-sdk';
-
-try {
-  const result = await run(agent, 'Delete file...');
-} catch (error) {
-  if (error instanceof ApprovalRequiredError) {
-    console.error('Approval required for:', error.toolName);
-    
-    // Recovery: Request approval and retry
-    const approved = await requestApproval(error.toolName, error.args);
-    if (approved) {
-      return await run(agent, 'Delete file...', {
-        // Pass approval in context
-      });
-    }
-  }
-}
-```
-
-**Properties:**
-- `toolName` - Tool requiring approval
-- `args` - Tool arguments
-- `message` - Error message
+- `fromAgent` - Name of the agent that attempted handoff (string)
+- `toAgent` - Name of the target agent (string)
+- `message` - Reason for handoff failure
+- `originalError` - Underlying error if available
 
 ---
 
@@ -411,34 +376,26 @@ if (error instanceof ToolExecutionError && isTransient(error)) {
 ```typescript
 // Execution errors
 class MaxTurnsExceededError extends Error {
-  stepNumber: number;
-  maxTurns: number;
+  // message includes the maxTurns limit
 }
 
 // Validation errors
 class GuardrailTripwireTriggered extends Error {
   guardrailName: string;
-  type: 'input' | 'output';
+  metadata?: Record<string, any>;
 }
 
 // Tool errors
 class ToolExecutionError extends Error {
   toolName: string;
-  args: any;
-  originalError: Error;
+  originalError?: Error;
 }
 
 // Handoff errors
 class HandoffError extends Error {
-  fromAgent: Agent;
-  toAgent: Agent;
-  reason: string;
-}
-
-// Approval errors
-class ApprovalRequiredError extends Error {
-  toolName: string;
-  args: any;
+  fromAgent: string;
+  toAgent: string;
+  originalError?: Error;
 }
 ```
 

@@ -9,7 +9,7 @@ Be respectful, inclusive, and constructive in all interactions.
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/your-username/agents-sdk.git`
+2. Clone your fork: `git clone https://github.com/your-username/tawk-agents-sdk.git`
 3. Install dependencies: `npm install`
 4. Create a branch: `git checkout -b feature/your-feature-name`
 
@@ -26,7 +26,7 @@ npm run build
 npm test
 
 # Run specific test
-npm run test:basic
+npm run test:core
 ```
 
 ## Code Style
@@ -62,7 +62,7 @@ describe('Your Feature', () => {
 Use clear, descriptive commit messages:
 
 ```
-feat: add new handoff feature
+feat: add new transfer feature
 fix: resolve session memory leak
 docs: update README with examples
 perf: optimize tool result extraction

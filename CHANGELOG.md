@@ -5,6 +5,34 @@ All notable changes to the Tawk Agents SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-03-15
+
+### Breaking Changes
+- **AI SDK v6 migration**: Updated from `ai@^4.0.0` to `ai@^6.0.0` and all `@ai-sdk/*` providers to `^3.0.0`
+- `RunState.create()` is now the async factory (required for AI SDK v6 `convertToModelMessages`)
+- `GenerateTextResult` generic signature updated for v6 (`GenerateTextResult<ToolSet, any>`)
+- `generateImage` promoted to stable (removed `experimental_` prefix)
+- `rerank` is now a direct import from `'ai'`
+- `EmbeddingModel` no longer takes a generic parameter
+- Removed stale integration, e2e, and manual test suites
+- Langfuse integration now requires explicit `initLangfuse({ publicKey, secretKey })` config (removed auto-init from env vars)
+
+### Added
+- Per-tool TOON encoding support via `useTOON` on individual tool definitions
+- Token budget tracking with graceful degradation (`TokenBudgetTracker`)
+
+### Fixed
+- Error sanitization applied consistently across all tracing paths
+- Updated all unit tests for v3.0.0 API compatibility (198 tests passing)
+
+### Compatibility
+
+**Node.js**: >= 18.0.0
+**TypeScript**: >= 5.7.0
+**AI SDK**: `ai@^6.0.0`, `@ai-sdk/*@^3.0.0`
+
+---
+
 ## [2.0.0] - 2026-01-27
 
 ### Added

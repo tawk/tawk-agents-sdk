@@ -36,8 +36,7 @@ const agent = new Agent({
 // That's it! Tracing happens automatically
 const result = await run(agent, 'Hello!');
 
-// View trace in Langfuse dashboard
-console.log('Trace URL:', result.metadata.traceUrl);
+// View traces in the Langfuse dashboard
 ```
 
 ### What Gets Traced Automatically
@@ -97,12 +96,11 @@ import { withTrace, createContextualSpan, run } from '@tawk.to/tawk-agents-sdk';
 
 await withTrace('Complete Workflow', async (trace) => {
   // Trace custom database query
-  const dbSpan = createContextualSpan({
-    name: 'Database Query',
+  const dbSpan = createContextualSpan('Database Query', {
     input: { query: 'SELECT * FROM users' }
   });
   const users = await db.query('SELECT * FROM users');
-  dbSpan.end({ output: { count: users.length } });
+  dbSpan?.end({ output: { count: users.length } });
   
   // Trace agent call (automatic)
   const result = await run(agent, 'Process users');
@@ -142,7 +140,7 @@ await withTrace('User Request', async (trace) => {
 # .env
 LANGFUSE_PUBLIC_KEY=pk-xxx
 LANGFUSE_SECRET_KEY=sk-xxx
-LANGFUSE_HOST=https://cloud.langfuse.com  # Optional
+LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Optional, defaults to cloud
 ```
 
 ### Automatic Tracing
@@ -166,12 +164,12 @@ const result = await run(agent, 'Hello!');
 Only needed if you want custom Langfuse configuration:
 
 ```typescript
-import { initializeLangfuse } from '@tawk.to/tawk-agents-sdk';
+import { initLangfuse } from '@tawk.to/tawk-agents-sdk';
 
-initializeLangfuse({
+initLangfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  host: 'https://custom.langfuse.com',
+  baseUrl: 'https://custom.langfuse.com',
 });
 ```
 
@@ -205,16 +203,15 @@ Create custom spans in your code:
 ```typescript
 import { createContextualSpan } from '@tawk.to/tawk-agents-sdk';
 
-const span = createContextualSpan({
-  name: 'Custom Operation',
+const span = createContextualSpan('Custom Operation', {
   input: { data: 'value' }
 });
 
 try {
   await doSomething();
-  span.end({ output: { result: 'success' } });
+  span?.end({ output: { result: 'success' } });
 } catch (error) {
-  span.end({ output: { error: error.message }, level: 'ERROR' });
+  span?.end({ output: { error: error.message }, level: 'ERROR' });
 }
 ```
 
@@ -266,10 +263,10 @@ await withTrace('Workflow', async (trace) => {
 ```typescript
 // ✅ Good: Trace your own code
 await withTrace('Complete Workflow', async (trace) => {
-  const dbSpan = createContextualSpan({ name: 'Database Query' });
+  const dbSpan = createContextualSpan('Database Query');
   const data = await db.query('...');
-  dbSpan.end({ output: data });
-  
+  dbSpan?.end({ output: data });
+
   const result = await run(agent, data);
   return result;
 });

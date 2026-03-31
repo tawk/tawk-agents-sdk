@@ -1,4 +1,4 @@
-# 📚 Advanced Features Guide
+# Advanced Features Guide
 
 Complete guide to advanced features in Tawk Agents SDK.
 
@@ -56,46 +56,23 @@ const allText = extractAllText(messages);
 
 ## Lifecycle Hooks
 
-Hook into agent execution lifecycle for custom logic.
+Hook into agent execution lifecycle for custom logic using EventEmitter events.
 
-### Available Hooks
+### Available Events
 
 ```typescript
-class AgentHooks {
-  onStart(context: any): void | Promise<void>
-  onComplete(context: any, result: any): void | Promise<void>
-  onError(context: any, error: Error): void | Promise<void>
-  onToolCall(context: any, toolName: string, args: any): void | Promise<void>
-  onToolResult(context: any, toolName: string, result: any): void | Promise<void>
-}
+// Agent-level events (subscribe via agent.on(...))
+'agent_start'      // Emitted when agent starts execution
+'agent_end'        // Emitted when agent finishes
+'agent_handoff'    // Emitted when agent hands off to another agent
+'agent_tool_start' // Emitted when agent starts executing a tool
+'agent_tool_end'   // Emitted when agent finishes executing a tool
 ```
 
 ### Example Usage
 
 ```typescript
-import { Agent, run, AgentHooks } from '@tawk.to/tawk-agents-sdk';
-
-class LoggingAgent extends AgentHooks {
-  onStart(context: any) {
-    console.log('[Agent] Starting execution');
-  }
-
-  onToolCall(context: any, toolName: string, args: any) {
-    console.log(`[Tool] Calling ${toolName}`, args);
-  }
-
-  onToolResult(context: any, toolName: string, result: any) {
-    console.log(`[Tool] Result from ${toolName}`, result);
-  }
-
-  onComplete(context: any, result: any) {
-    console.log('[Agent] Execution complete');
-  }
-
-  onError(context: any, error: Error) {
-    console.error('[Agent] Error:', error);
-  }
-}
+import { Agent, run } from '@tawk.to/tawk-agents-sdk';
 
 const agent = new Agent({
   name: 'hooked-agent',
@@ -104,8 +81,21 @@ const agent = new Agent({
   tools: { /* your tools */ }
 });
 
-// Apply hooks
-Object.setPrototypeOf(agent, LoggingAgent.prototype);
+agent.on('agent_start', (context, agent) => {
+  console.log('[Agent] Starting execution');
+});
+
+agent.on('agent_tool_start', (context, tool) => {
+  console.log(`[Tool] Calling ${tool.name}`, tool.args);
+});
+
+agent.on('agent_tool_end', (context, tool, result) => {
+  console.log(`[Tool] Result from ${tool.name}`, result);
+});
+
+agent.on('agent_end', (context, output) => {
+  console.log('[Agent] Execution complete');
+});
 
 const result = await run(agent, 'Hello');
 ```
@@ -113,40 +103,38 @@ const result = await run(agent, 'Hello');
 ### Practical Example: Performance Monitoring
 
 ```typescript
-class MonitoringAgent extends AgentHooks {
-  private startTime: number = 0;
-  private toolMetrics: Map<string, number[]> = new Map();
+const startTime = { value: 0 };
+const toolMetrics: Map<string, number[]> = new Map();
 
-  onStart() {
-    this.startTime = Date.now();
-  }
+agent.on('agent_start', () => {
+  startTime.value = Date.now();
+});
 
-  onToolCall(context: any, toolName: string) {
-    if (!this.toolMetrics.has(toolName)) {
-      this.toolMetrics.set(toolName, []);
-    }
-    this.toolMetrics.get(toolName)!.push(Date.now());
+agent.on('agent_tool_start', (context, tool) => {
+  if (!toolMetrics.has(tool.name)) {
+    toolMetrics.set(tool.name, []);
   }
+  toolMetrics.get(tool.name)!.push(Date.now());
+});
 
-  onToolResult(context: any, toolName: string) {
-    const times = this.toolMetrics.get(toolName)!;
-    const duration = Date.now() - times[times.length - 1];
-    console.log(`Tool ${toolName} took ${duration}ms`);
-  }
+agent.on('agent_tool_end', (context, tool) => {
+  const times = toolMetrics.get(tool.name)!;
+  const duration = Date.now() - times[times.length - 1];
+  console.log(`Tool ${tool.name} took ${duration}ms`);
+});
 
-  onComplete() {
-    const totalTime = Date.now() - this.startTime;
-    console.log(`Total execution: ${totalTime}ms`);
-    console.log('Tool usage:', Object.fromEntries(this.toolMetrics));
-  }
-}
+agent.on('agent_end', () => {
+  const totalTime = Date.now() - startTime.value;
+  console.log(`Total execution: ${totalTime}ms`);
+  console.log('Tool usage:', Object.fromEntries(toolMetrics));
+});
 ```
 
 ---
 
 ## Advanced Tracing
 
-Beyond- **Transfer-safe** - transfer markers preserved custom traces.
+Beyond automatic tracing, you can create custom traces for complex workflows.
 
 ### Custom Trace Context
 
@@ -154,15 +142,7 @@ Beyond- **Transfer-safe** - transfer markers preserved custom traces.
 import { withTrace, withFunctionSpan, getCurrentTrace } from '@tawk.to/tawk-agents-sdk';
 
 await withTrace(
-  {
-    name: 'Custom Operation',
-    userId: 'user-123',
-    sessionId: 'session-456',
-    metadata: { 
-      environment: 'production',
-      version: '1.0.0' 
-    },
-  },
+  'Custom Operation',
   async (trace) => {
     // Operation 1
     const result1 = await withFunctionSpan(
@@ -186,6 +166,14 @@ await withTrace(
     );
 
     return { result1, result2 };
+  },
+  {
+    userId: 'user-123',
+    sessionId: 'session-456',
+    metadata: {
+      environment: 'production',
+      version: '1.0.0'
+    },
   }
 );
 ```
@@ -207,7 +195,7 @@ if (trace) {
   try {
     // Do work
     const result = await doWork();
-    
+
     span?.end({ output: result });
   } catch (error) {
     span?.end({ output: { error: String(error) }, level: 'ERROR' });
@@ -221,22 +209,23 @@ if (trace) {
 
 Error-safe execution with automatic error handling.
 
+`SafeExecuteResult<T>` is a tuple type: `[Error | unknown | null, T | null]`.
+
 ### Basic Safe Execute
 
 ```typescript
 import { safeExecute } from '@tawk.to/tawk-agents-sdk';
 
-const result = await safeExecute(async () => {
+const [error, result] = await safeExecute(async () => {
   // Potentially failing operation
   const data = await riskyOperation();
   return data;
 });
 
-if (result.success) {
-  console.log('Success:', result.result);
+if (error) {
+  console.error('Error:', error);
 } else {
-  console.error('Error:', result.error);
-  console.error('Stack:', result.stack);
+  console.log('Success:', result);
 }
 ```
 
@@ -245,21 +234,17 @@ if (result.success) {
 ```typescript
 import { safeExecuteWithTimeout } from '@tawk.to/tawk-agents-sdk';
 
-const result = await safeExecuteWithTimeout(
+const [error, result] = await safeExecuteWithTimeout(
   async () => {
     return await slowDatabaseQuery();
   },
   5000 // 5 second timeout
 );
 
-if (result.success) {
-  console.log('Query completed:', result.result);
+if (error) {
+  console.error('Query failed or timed out:', error);
 } else {
-  if (result.timeout) {
-    console.error('Query timed out after 5s');
-  } else {
-    console.error('Query failed:', result.error);
-  }
+  console.log('Query completed:', result);
 }
 ```
 
@@ -270,7 +255,7 @@ const safeTool = tool({
   description: 'Tool with built-in error handling',
   inputSchema: z.object({ url: z.string() }),
   execute: async ({ url }) => {
-    const result = await safeExecuteWithTimeout(
+    const [error, data] = await safeExecuteWithTimeout(
       async () => {
         const response = await fetch(url);
         return await response.json();
@@ -278,14 +263,14 @@ const safeTool = tool({
       3000
     );
 
-    if (!result.success) {
+    if (error) {
       return {
         error: true,
-        message: result.timeout ? 'Request timed out' : result.error,
+        message: String(error),
       };
     }
 
-    return result.result;
+    return data;
   },
 });
 ```
@@ -307,13 +292,9 @@ const longRunningTool = tool({
   execute: async ({ taskId }) => {
     // Start background task
     const promise = processLargeDataset(taskId);
-    
+
     // Return immediately
-    return backgroundResult(promise, {
-      status: 'processing',
-      taskId,
-      estimatedTime: '5 minutes',
-    });
+    return backgroundResult(promise);
   },
 });
 
@@ -321,8 +302,8 @@ const longRunningTool = tool({
 const result = await longRunningTool.execute({ taskId: '123' });
 
 if (isBackgroundResult(result)) {
-  console.log('Task started:', result.metadata);
-  
+  console.log('Task started in background');
+
   // Optionally wait for completion
   const finalResult = await result.promise;
   console.log('Task completed:', finalResult);
@@ -335,13 +316,13 @@ if (isBackgroundResult(result)) {
 const pollingTool = tool({
   description: 'Poll for task completion',
   inputSchema: z.object({ taskId: z.string() }),
-  execute: async ({ taskId }, context) => {
+  execute: async ({ taskId }) => {
     const status = await checkTaskStatus(taskId);
-    
+
     if (status.completed) {
       return status.result;
     }
-    
+
     // Return background result with polling
     const promise = new Promise((resolve) => {
       const interval = setInterval(async () => {
@@ -352,11 +333,8 @@ const pollingTool = tool({
         }
       }, 5000);
     });
-    
-    return backgroundResult(promise, {
-      status: 'polling',
-      progress: status.progress,
-    });
+
+    return backgroundResult(promise);
   },
 });
 ```
@@ -365,7 +343,7 @@ const pollingTool = tool({
 
 ## RunState Management
 
-Advanced state management for interruption and resumption.
+Advanced state management for multi-step workflows.
 
 ### Saving and Resuming State
 
@@ -387,48 +365,22 @@ const result2 = await run(agent, savedState);
 console.log('Resumed and completed:', result2.finalOutput);
 ```
 
-### Checking for Interruptions
-
-```typescript
-import { needsApproval, resume } from '@tawk.to/tawk-agents-sdk';
-
-const result = await run(agent, 'Perform action');
-
-if (needsApproval(result)) {
-  console.log('Waiting for approval...');
-  
-  // Wait for user approval
-  const approved = await getUserApproval();
-  
-  if (approved) {
-    // Resume execution
-    const finalResult = await resume(result.state, { approved: true });
-    console.log('Completed:', finalResult.finalOutput);
-  }
-}
-```
-
 ### Multi-Step Workflows
 
 ```typescript
 class WorkflowManager {
   async executeWorkflow(steps: string[]) {
     let state: RunState | undefined;
-    
+
     for (const step of steps) {
       const result = state
         ? await run(agent, state)
         : await run(agent, step);
-      
+
       console.log(`Step completed: ${step}`);
-      
-      if (!result.state?.isMaxTurnsExceeded()) {
-        state = result.state;
-      } else {
-        break;
-      }
+      state = result.state;
     }
-    
+
     return state;
   }
 }
@@ -467,28 +419,6 @@ const partialConfig: PartialAgentConfig = {
 };
 ```
 
-### Required/Optional Keys
-
-```typescript
-import type { RequireKeys, OptionalKeys } from '@tawk.to/tawk-agents-sdk';
-
-// Require specific keys
-type RequiredConfig = RequireKeys<AgentConfig, 'name' | 'model'>;
-
-// Get only optional keys
-type OnlyOptional = OptionalKeys<AgentConfig>;
-```
-
-### Key Filtering
-
-```typescript
-import type { KeysOfType } from '@tawk.to/tawk-agents-sdk';
-
-// Get keys of specific type
-type StringKeys = KeysOfType<AgentConfig, string>;
-type FunctionKeys = KeysOfType<AgentConfig, Function>;
-```
-
 ### Promise Unwrapping
 
 ```typescript
@@ -503,28 +433,6 @@ type Data = UnwrapPromise<ReturnType<typeof fetchData>>;
 // { id: number; name: string }
 ```
 
-### Array Element Type
-
-```typescript
-import type { ArrayElement } from '@tawk.to/tawk-agents-sdk';
-
-const tools = [tool1, tool2, tool3];
-
-// Get element type
-type Tool = ArrayElement<typeof tools>;
-```
-
-### Case Conversion
-
-```typescript
-import type { SnakeToCamelCase } from '@tawk.to/tawk-agents-sdk';
-
-// Convert snake_case to camelCase at type level
-type SnakeKeys = 'user_id' | 'first_name' | 'last_name';
-type CamelKeys = SnakeToCamelCase<SnakeKeys>;
-// 'userId' | 'firstName' | 'lastName'
-```
-
 ---
 
 ## Complete Example
@@ -536,7 +444,6 @@ import {
   Agent,
   run,
   tool,
-  AgentHooks,
   withTrace,
   safeExecuteWithTimeout,
   backgroundResult,
@@ -548,27 +455,12 @@ import {
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
-// Custom monitoring hooks
-class MonitoredAgent extends AgentHooks {
-  onStart() {
-    console.log('🚀 Agent starting');
-  }
-
-  onToolCall(context: any, toolName: string, args: any) {
-    console.log(`🔧 Calling ${toolName}`, args);
-  }
-
-  onComplete(context: any, result: any) {
-    console.log('✅ Agent completed');
-  }
-}
-
 // Safe tool with timeout
 const dataTool = tool({
   description: 'Fetch data safely',
   inputSchema: z.object({ url: z.string() }),
   execute: async ({ url }) => {
-    const result = await safeExecuteWithTimeout(
+    const [error, data] = await safeExecuteWithTimeout(
       async () => {
         const response = await fetch(url);
         return await response.json();
@@ -576,7 +468,7 @@ const dataTool = tool({
       5000
     );
 
-    return result.success ? result.result : { error: result.error };
+    return error ? { error: String(error) } : data;
   },
 });
 
@@ -586,11 +478,11 @@ const processTool = tool({
   inputSchema: z.object({ datasetId: z.string() }),
   execute: async ({ datasetId }) => {
     const promise = processLargeDataset(datasetId);
-    return backgroundResult(promise, { status: 'processing', datasetId });
+    return backgroundResult(promise);
   },
 });
 
-// Create agent with hooks
+// Create agent
 const agent = new Agent({
   name: 'AdvancedAgent',
   model: openai('gpt-4o'),
@@ -601,15 +493,22 @@ const agent = new Agent({
   },
 });
 
-Object.setPrototypeOf(agent, MonitoredAgent.prototype);
+// Attach monitoring hooks
+agent.on('agent_start', () => {
+  console.log('Agent starting');
+});
+
+agent.on('agent_tool_start', (context, tool) => {
+  console.log(`Calling ${tool.name}`, tool.args);
+});
+
+agent.on('agent_end', () => {
+  console.log('Agent completed');
+});
 
 // Execute with custom tracing
 await withTrace(
-  {
-    name: 'Advanced Agent Run',
-    userId: 'user-123',
-    metadata: { feature: 'advanced-example' },
-  },
+  'Advanced Agent Run',
   async (trace) => {
     // Build conversation
     const messages = [
@@ -621,11 +520,10 @@ await withTrace(
     const result = await run(agent, messages);
 
     console.log('Final output:', result.finalOutput);
-
-    // Check for background results
-    if (result.metadata.hasBackgroundTasks) {
-      console.log('Background tasks running...');
-    }
+  },
+  {
+    userId: 'user-123',
+    metadata: { feature: 'advanced-example' },
   }
 );
 ```
@@ -641,5 +539,3 @@ await withTrace(
 ---
 
 *For more examples, see the [examples directory](../../examples).*
-
-
